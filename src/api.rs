@@ -1,14 +1,12 @@
+use base64::encode as base64encode;
 use rand::{distributions::Alphanumeric, rngs::ThreadRng, seq::SliceRandom, thread_rng, Rng};
 use regex::Regex;
-use reqwest::header::{HeaderMap, ACCEPT_LANGUAGE, COOKIE, USER_AGENT};
+use reqwest::header::{HeaderMap, ACCEPT_LANGUAGE, AUTHORIZATION, COOKIE, USER_AGENT};
 use serde_json;
 use std::collections::HashMap;
 use std::error::Error;
 use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
-
-//FIXME: enhance `is_ok` by spliting the values that is
-// compared to the response to avoid change in order, resulting in false negative
 
 use super::endpoints;
 use super::useragents::USER_AGENTS;
@@ -143,6 +141,7 @@ pub struct DataAccount {
     fullname: String,
     fbid: String,
     uid: String,
+    username: String,
 }
 
 pub enum Method {
@@ -255,22 +254,16 @@ impl API for Create {
         headers
     }
     fn is_ok<'a>(&self, text: &'a str, _: Option<&'a [String]>) -> (bool, Option<Vec<String>>) {
-        const CREATE_AVAILABLE: [&str; 3] = [
-            "This password is too easy to guess. Please create a new one",
-            "Create a password at least 6 characters long.",
-            "{\"account_created\": false, \"errors\": {\"__all__\": [{\"message\": \"Create a password at least 6 characters long.\", \"code\": \"too_short_password\"}]}",
-        ];
+        let resp: serde_json::Value = match serde_json::from_str(text) {
+            Ok(t) => t,
+            Err(_) => return (false, None),
+        };
 
-        (
-            CREATE_AVAILABLE
-                .iter()
-                .map(|x| text.contains(x))
-                .filter(|b| *b)
-                .collect::<Vec<bool>>()
-                .len()
-                != 0,
-            None,
-        )
+        if resp["errors"].get("username").is_none() {
+            return (true, None);
+        }
+
+        (false, None)
     }
 }
 
@@ -294,22 +287,16 @@ impl API for CreateBusinessValidated {
         headers
     }
     fn is_ok<'a>(&self, text: &'a str, _: Option<&'a [String]>) -> (bool, Option<Vec<String>>) {
-        const CREATE_AVAILABLE: [&str; 3] = [
-            "This password is too easy to guess. Please create a new one",
-            "Create a password at least 6 characters long.",
-            "{\"account_created\": false, \"errors\": {\"__all__\": [{\"message\": \"Create a password at least 6 characters long.\", \"code\": \"too_short_password\"}]}",
-        ];
+        let resp: serde_json::Value = match serde_json::from_str(text) {
+            Ok(t) => t,
+            Err(_) => return (false, None),
+        };
 
-        (
-            CREATE_AVAILABLE
-                .iter()
-                .map(|x| text.contains(x))
-                .filter(|b| *b)
-                .collect::<Vec<bool>>()
-                .len()
-                != 0,
-            None,
-        )
+        if resp["errors"].get("username").is_none() {
+            return (true, None);
+        }
+
+        (false, None)
     }
 }
 
@@ -333,22 +320,16 @@ impl API for CreateBusiness {
         headers
     }
     fn is_ok<'a>(&self, text: &'a str, _: Option<&'a [String]>) -> (bool, Option<Vec<String>>) {
-        const CREATE_AVAILABLE: [&str; 3] = [
-            "This password is too easy to guess. Please create a new one",
-            "Create a password at least 6 characters long.",
-            "{\"account_created\": false, \"errors\": {\"__all__\": [{\"message\": \"Create a password at least 6 characters long.\", \"code\": \"too_short_password\"}]}",
-        ];
+        let resp: serde_json::Value = match serde_json::from_str(text) {
+            Ok(t) => t,
+            Err(_) => return (false, None),
+        };
 
-        (
-            CREATE_AVAILABLE
-                .iter()
-                .map(|x| text.contains(x))
-                .filter(|b| *b)
-                .collect::<Vec<bool>>()
-                .len()
-                != 0,
-            None,
-        )
+        if resp["errors"].get("username").is_none() {
+            return (true, None);
+        }
+
+        (false, None)
     }
 }
 
@@ -372,22 +353,16 @@ impl API for CreateValidated {
         headers
     }
     fn is_ok<'a>(&self, text: &'a str, _: Option<&'a [String]>) -> (bool, Option<Vec<String>>) {
-        const CREATE_AVAILABLE: [&str; 3] = [
-            "This password is too easy to guess. Please create a new one",
-            "Create a password at least 6 characters long.",
-            "{\"account_created\": false, \"errors\": {\"__all__\": [{\"message\": \"Create a password at least 6 characters long.\", \"code\": \"too_short_password\"}]}",
-        ];
+        let resp: serde_json::Value = match serde_json::from_str(text) {
+            Ok(t) => t,
+            Err(_) => return (false, None),
+        };
 
-        (
-            CREATE_AVAILABLE
-                .iter()
-                .map(|x| text.contains(x))
-                .filter(|b| *b)
-                .collect::<Vec<bool>>()
-                .len()
-                != 0,
-            None,
-        )
+        if resp["errors"].get("username").is_none() {
+            return (true, None);
+        }
+
+        (false, None)
     }
 }
 
@@ -501,30 +476,43 @@ impl API for CheckUsername {
         headers
     }
     fn is_ok<'a>(&self, text: &'a str, _: Option<&'a [String]>) -> (bool, Option<Vec<String>>) {
-        if text.contains("This username isn't available") || text.contains("username_") {
-            return (false, None);
+        let resp: serde_json::Value = match serde_json::from_str(text) {
+            Ok(t) => t,
+            Err(_) => return (false, None),
+        };
+
+        match resp.get("available") {
+            Some(t) if (t.as_bool().is_some() && t.as_bool().unwrap()) => return (true, None),
+            None | Some(_) => (),
         }
 
-        if text.contains("suggestions") {
-            let resp: serde_json::Value = match serde_json::from_str(text) {
-                Ok(t) => t,
-                Err(_) => return (false, None),
-            };
+        if let Some(username_suggestions) = resp.get("username_suggestions") {
+            if let Some(suggestions_with_metadata) =
+                username_suggestions.get("suggestions_with_metadata")
+            {
+                if let Some(suggestions) = suggestions_with_metadata.get("suggestions") {
+                    let usernames = match suggestions.as_array() {
+                        Some(t) => t,
+                        None => return (false, None),
+                    };
 
-            let suggestions = match resp["suggestions"].as_array() {
-                Some(t) => t,
-                _ => return (false, None),
-            };
+                    let usernames = usernames
+                        .iter()
+                        .filter(|u| u.get("username").is_some())
+                        .map(|u| {
+                            u.get("username")
+                                .unwrap()
+                                .as_str()
+                                .unwrap_or_else(|| "error")
+                        })
+                        .filter(|u| u.len() <= 4)
+                        .map(|u| u.to_string())
+                        .collect::<Vec<String>>();
 
-            let usernames = suggestions
-                .iter()
-                .map(|u| u.as_str().unwrap_or_else(|| "error"))
-                .filter(|u| u.len() <= 4)
-                .map(|u| String::from(u))
-                .collect::<Vec<String>>();
-
-            if usernames.len() != 0 {
-                return (true, Some(usernames));
+                    if usernames.len() != 0 {
+                        return (true, Some(usernames));
+                    }
+                }
             }
         }
 
@@ -561,20 +549,45 @@ impl API for UsernameSuggestions {
         headers
     }
     fn is_ok<'a>(&self, text: &'a str, _: Option<&'a [String]>) -> (bool, Option<Vec<String>>) {
-        if text.contains("username") {
-            let usernames = match Regex::new("\"username\":\\s*\"(.*?)\"")
-                .unwrap()
-                .captures(text)
-            {
+        let resp: serde_json::Value = match serde_json::from_str(text) {
+            Ok(t) => t,
+            Err(_) => return (false, None),
+        };
+
+        if let Some(suggestions_with_metadata) = resp.get("suggestions_with_metadata") {
+            if let Some(suggestions) = suggestions_with_metadata.get("suggestions") {
+                let usernames = match suggestions.as_array() {
+                    Some(t) => t,
+                    None => return (false, None),
+                };
+
+                let usernames = usernames
+                    .iter()
+                    .filter(|u| u.get("username").is_some())
+                    .map(|u| {
+                        u.get("username")
+                            .unwrap()
+                            .as_str()
+                            .unwrap_or_else(|| "error")
+                    })
+                    .filter(|u| u.len() <= 4)
+                    .map(|u| u.to_string())
+                    .collect::<Vec<String>>();
+
+                if usernames.len() != 0 {
+                    return (true, Some(usernames));
+                }
+            }
+        } else if let Some(suggestions) = resp.get("suggestions") {
+            let usernames = match suggestions.as_array() {
                 Some(t) => t,
                 None => return (false, None),
             };
 
             let usernames = usernames
                 .iter()
-                .enumerate()
-                .filter(|(i, u)| *i != 0 && u.is_some())
-                .map(|(_, u)| u.unwrap().as_str())
+                .filter(|u| u.as_str().is_some())
+                .map(|u| u.as_str().unwrap_or_else(|| "error"))
                 .filter(|u| u.len() <= 4)
                 .map(|u| u.to_string())
                 .collect::<Vec<String>>();
@@ -664,20 +677,31 @@ impl API for BloksUsernameChange {
     }
     fn headers(&self) -> HeaderMap {
         let mut headers = HeaderMap::new();
-        headers.insert(USER_AGENT, user_agent("187.0.0.32.120").parse().unwrap());
+        headers.insert(USER_AGENT, user_agent("237.0.0.14.102").parse().unwrap());
+        headers.insert(ACCEPT_LANGUAGE, "en;q=0.9".parse().unwrap());
         headers.insert(
             COOKIE,
             format!("sessionid={}", self.0.session_id.clone())
                 .parse()
                 .unwrap(),
         );
+        headers.insert(
+            AUTHORIZATION,
+            format!(
+                "Bearer IGT:2:{}",
+                base64encode(format!(
+                    "{{\"ds_user_id\":\"{}\",\"sessionid\":\"{}\"}}",
+                    self.0.uid, self.0.session_id
+                ))
+            )
+            .parse()
+            .unwrap(),
+        );
         headers.insert("X-CSRFTOKEN", csrftoken().parse().unwrap());
         headers
     }
     fn is_ok<'a>(&self, text: &'a str, _: Option<&'a [String]>) -> (bool, Option<Vec<String>>) {
-        if text.contains("\"mode\":\"d\"")
-            || text.contains(format!("\"{}\":\"{}\"", self.0.fbid, self.0.session_id).as_str())
-        {
+        if text.contains("mode\":\"d") || text.contains("mode\": \"d") {
             (true, None)
         } else {
             (false, None)
@@ -715,7 +739,26 @@ impl API for CurrentUser {
 }
 
 impl DataAccount {
-    pub fn parse(raw: &str, session_id: String) -> Option<Self> {
+    pub fn new(
+        session_id: &str,
+        username: &str,
+        email: &str,
+        phone: &str,
+        fullname: &str,
+        fbid: &str,
+        uid: &str,
+    ) -> Self {
+        DataAccount {
+            session_id: session_id.to_string(),
+            email: email.to_string(),
+            phone: phone.to_string(),
+            fullname: fullname.to_string(),
+            fbid: fbid.to_string(),
+            uid: uid.to_string(),
+            username: username.to_string(),
+        }
+    }
+    pub fn parse(raw: &str, session_id: &str) -> Option<Self> {
         let resp: serde_json::Value = match serde_json::from_str(raw) {
             Ok(t) => t,
             _ => return None,
@@ -723,7 +766,8 @@ impl DataAccount {
 
         if resp["status"].as_str()? == "ok" {
             return Some(Self {
-                session_id,
+                session_id: session_id.to_string(),
+                username: resp["user"]["username"].as_str()?.to_string(),
                 email: resp["user"]["email"].as_str()?.to_string(),
                 phone: resp["user"]["phone_number"].as_str()?.to_string(),
                 fullname: resp["user"]["full_name"].as_str()?.to_string(),

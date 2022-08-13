@@ -7,29 +7,30 @@ mod test {
     use crate::client::Client;
     use reqwest::Proxy;
 
-    const SESSION_ID: &str = "MISSING";
+    const SESSION_ID: &str = "54244227166%3Aa2jPBDB8NJZVnn%3A24";
     const TIMEOUT: Duration = Duration::from_secs(10);
 
-    #[ignore = "sessions aren't available"]
+    #[ignore]
     #[tokio::test]
     async fn get_profile() {
         let client = Client::new(TIMEOUT, None).unwrap();
         let get_profile = APIs::new(APIs::CurrentUser(String::from(SESSION_ID)));
 
         let resp = client.execute(&get_profile, None).await.unwrap();
-        let account = DataAccount::parse(resp.raw(), String::from(SESSION_ID)).unwrap();
+        let account = DataAccount::parse(resp.raw(), SESSION_ID).unwrap();
 
         println!("{:?}", account);
     }
 
-    #[ignore = "sessions aren't available"]
+    //#[ignore]
     #[tokio::test]
-    async fn edit_profile() {
+    async fn change_username_async() {
         let client = Client::new(TIMEOUT, None).unwrap();
         let get_profile = APIs::new(APIs::CurrentUser(String::from(SESSION_ID)));
 
         let resp = client.execute(&get_profile, None).await.unwrap();
-        let account = DataAccount::parse(resp.raw(), String::from(SESSION_ID)).unwrap();
+        let account = DataAccount::parse(resp.raw(), SESSION_ID).unwrap();
+        println!("{}", resp.raw());
         println!("{:?}", account);
 
         let BloksUsernameChange = APIs::new(APIs::BloksUsernameChange(account));
@@ -42,6 +43,7 @@ mod test {
         println!("{}", resp.raw());
     }
 
+    #[ignore]
     #[tokio::test]
     async fn check_username() {
         let client = Client::new(TIMEOUT, None).unwrap();
@@ -56,6 +58,7 @@ mod test {
         println!("{}", resp.raw());
     }
 
+    #[ignore]
     #[tokio::test]
     async fn create() {
         let client = Client::new(TIMEOUT, None).unwrap();
@@ -67,6 +70,7 @@ mod test {
         println!("{}", resp.raw());
     }
 
+    #[ignore]
     #[tokio::test]
     async fn create_business_validated() {
         let client = Client::new(TIMEOUT, None).unwrap();
@@ -81,6 +85,7 @@ mod test {
         println!("{}", resp.raw());
     }
 
+    #[ignore]
     #[tokio::test]
     async fn web_create_ajax() {
         let client = Client::new(TIMEOUT, None).unwrap();
@@ -97,6 +102,7 @@ mod test {
         println!("{}", resp.raw());
     }
 
+    #[ignore]
     #[tokio::test]
     async fn Username_suggestions() {
         let client = Client::new(TIMEOUT, None).unwrap();
