@@ -2,8 +2,11 @@ pub const CREATE: &str = "https://i.instagram.com/api/v1/accounts/create/";
 pub const CREATE_BUSINESS_VALIDATED: &str =
     "https://i.instagram.com/api/v1/accounts/create_business_validated/";
 pub const CREATE_BUSINESS: &str = "https://i.instagram.com/api/v1/accounts/create_business/";
+
+#[deprecated]
 pub const CREATE_SECONDARY_ACCOUNT: &str =
     "https://i.instagram.com/api/v1/multiple_accounts/create_secondary_account/";
+
 pub const CREATE_VALIDATED: &str = "https://i.instagram.com/api/v1/accounts/create_validated/";
 pub const WEB_CREATE_AJAX: &str = "https://www.instagram.com/accounts/web_create_ajax/attempt/";
 pub const CHECK_USERNAME: &str = "https://i.instagram.com/api/v1/users/check_username/";

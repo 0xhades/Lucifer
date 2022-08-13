@@ -82,20 +82,6 @@ mod test {
     }
 
     #[tokio::test]
-    async fn create_secondary_account() {
-        let client = Client::new(TIMEOUT, None).unwrap();
-        let CreateSecondaryAccount = APIs::new(APIs::CreateSecondaryAccount);
-
-        let username = UsernameBuilder::new().single("0xhadesssapfpes").build();
-        let resp = client
-            .execute(&CreateSecondaryAccount, Some(&username))
-            .await
-            .unwrap();
-
-        println!("{}", resp.raw());
-    }
-
-    #[tokio::test]
     async fn web_create_ajax() {
         let client = Client::new(TIMEOUT, None).unwrap();
         let WebCreateAjax = APIs::new(APIs::WebCreateAjax);

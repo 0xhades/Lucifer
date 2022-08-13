@@ -183,10 +183,6 @@ pub enum APIs {
     /// **Output**: `1` *username*
     CreateBusiness,
 
-    /// **Input**: `1` *username*,
-    /// **Output**: `1` *username*
-    CreateSecondaryAccount,
-
     /// **Input**: `3` *username*,
     /// **Output**: `multi` *username*
     WebCreateAjax,
@@ -217,7 +213,6 @@ impl APIs {
             APIs::Create => Box::new(Create {}),
             APIs::CreateBusinessValidated => Box::new(CreateBusinessValidated {}),
             APIs::CreateBusiness => Box::new(CreateBusiness {}),
-            APIs::CreateSecondaryAccount => Box::new(CreateSecondaryAccount {}),
             APIs::CreateValidated => Box::new(CreateValidated {}),
             APIs::WebCreateAjax => Box::new(WebCreateAjax {}),
             APIs::CheckUsername => Box::new(CheckUsername {}),
@@ -233,7 +228,6 @@ pub struct Create;
 pub struct CreateBusinessValidated;
 pub struct CreateValidated;
 pub struct CreateBusiness;
-pub struct CreateSecondaryAccount;
 pub struct WebCreateAjax;
 pub struct CheckUsername;
 pub struct UsernameSuggestions;
@@ -382,73 +376,6 @@ impl API for CreateValidated {
             "This password is too easy to guess. Please create a new one",
             "Create a password at least 6 characters long.",
             "{\"account_created\": false, \"errors\": {\"__all__\": [{\"message\": \"Create a password at least 6 characters long.\", \"code\": \"too_short_password\"}]}",
-        ];
-
-        (
-            CREATE_AVAILABLE
-                .iter()
-                .map(|x| text.contains(x))
-                .filter(|b| *b)
-                .collect::<Vec<bool>>()
-                .len()
-                != 0,
-            None,
-        )
-    }
-}
-
-impl API for CreateSecondaryAccount {
-    fn url(&self) -> &str {
-        endpoints::CREATE_SECONDARY_ACCOUNT
-    }
-    fn data<'a>(&self, usernames: Option<&'a [String]>) -> HashMap<&'static str, String> {
-        let mut forms: HashMap<&str, String> = HashMap::new();
-        let uuid = uuid();
-        forms.insert("main_user_session_token", "".to_string());
-        forms.insert("suggestedUsername", "true".to_string());
-        forms.insert(
-            "should_copy_consent_and_birthday_from_main",
-            "true".to_string(),
-        );
-        forms.insert("main_user_authorization_token", "Bearer+IGT%3A2%3AeyJkc191c2VyX2lkIjoiNDc0MTc4NjAxMDUiLCJzZXNzaW9uaWQiOiI0NzQxNzg2MDEwNSUzQVNrU0RqZXBaeG85bkF1JTNBOSIsInNob3VsZF91c2VfaGVhZGVyX292ZXJfY29va2llcyI6dHJ1ZX0%3D".to_string());
-        forms.insert(
-            "phone_id",
-            "fd6689be-bc4c-4231-bd73-f80ad51cc3a2".to_string(),
-        );
-        forms.insert("first_name", "".to_string());
-        forms.insert("adid", uuid.clone());
-        forms.insert("guid", uuid.clone());
-        forms.insert("device_id", uuid.clone());
-        forms.insert("main_user_id", "47417860105".to_string());
-        forms.insert("force_sign_up_code", "".to_string());
-        forms.insert(
-            "waterfall_id",
-            "a891ab67-fe16-44ea-8703-f995a75cb4b1".to_string(),
-        );
-        forms.insert("one_tap_opt_in", "true".to_string());
-        forms.insert("should_link_to_main", "false".to_string());
-        forms.insert(
-            "username",
-            usernames.unwrap().get(0).unwrap().clone().to_string(),
-        );
-        forms.insert(
-            "enc_password",
-            enc_password()
-                .unwrap_or_else(|_| "#PWD_INSTAGRAM_BROWSER:0:1660188352:fpes".to_string()),
-        );
-        forms
-    }
-    fn headers(&self) -> HeaderMap {
-        let mut headers = HeaderMap::new();
-        headers.insert(USER_AGENT, user_agent(DEVICE_VERSION).parse().unwrap());
-        headers.insert(COOKIE, cookies().parse().unwrap());
-        headers.insert("X-CSRFTOKEN", csrftoken().parse().unwrap());
-        headers
-    }
-    fn is_ok<'a>(&self, text: &'a str, _: Option<&'a [String]>) -> (bool, Option<Vec<String>>) {
-        const CREATE_AVAILABLE: [&str; 2] = [
-            "This password is too easy to guess. Please create a new one",
-            "Create a password at least 6 characters long.",
         ];
 
         (
