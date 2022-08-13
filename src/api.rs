@@ -447,22 +447,25 @@ impl API for WebCreateAjax {
         text: &'a str,
         usernames: Option<&'a [String]>,
     ) -> (bool, Option<Vec<String>>) {
-        if text.contains("{\"account_created\": false, \"errors\": {\"__all__\": [{\"message\": \"Create a password at least 6 characters long.\", \"code\": \"too_short_password\"}]}") {
-            return (true, Some(vec![usernames.unwrap().get(0).unwrap().clone().to_string()]));
+        let resp: serde_json::Value = match serde_json::from_str(text) {
+            Ok(t) => t,
+            Err(_) => return (false, None),
+        };
+
+        if resp["errors"].get("username").is_none() {
+            return (
+                true,
+                Some(vec![usernames.unwrap().get(0).unwrap().clone().to_string()]),
+            );
         }
 
-        if text.contains("username_suggestions") {
-            let resp: serde_json::Value = match serde_json::from_str(text) {
-                Ok(t) => t,
-                Err(_) => return (false, None),
-            };
-
-            let username_suggestions = match resp["username_suggestions"].as_array() {
+        if let Some(username_suggestions) = resp.get("username_suggestions") {
+            let usernames = match username_suggestions.as_array() {
                 Some(t) => t,
-                _ => return (false, None),
+                None => return (false, None),
             };
 
-            let usernames = username_suggestions
+            let usernames = usernames
                 .iter()
                 .map(|u| u.as_str().unwrap_or_else(|| "error"))
                 .filter(|u| u.len() <= 4)
