@@ -167,16 +167,47 @@ pub trait API {
 pub type SessionID = String;
 
 pub enum APIs {
+    /// **Input**: `1` *username*,
+    /// **Output**: `1` *username*
     Create,
+
+    /// **Input**: `1` *username*,
+    /// **Output**: `1` *username*
     CreateBusinessValidated,
+
+    /// **Input**: `1` *username*,
+    /// **Output**: `1` *username*  
     CreateValidated,
+
+    /// **Input**: `1` *username*,
+    /// **Output**: `1` *username*
     CreateBusiness,
+
+    /// **Input**: `1` *username*,
+    /// **Output**: `1` *username*
     CreateSecondaryAccount,
+
+    /// **Input**: `3` *username*,
+    /// **Output**: `multi` *username*
     WebCreateAjax,
+
+    /// **Input**: `1` *username*,
+    /// **Output**: `multi` *username*
     CheckUsername,
+    /// **Input**: `3` *username*,
+    /// **Output**: `multi` *username*
     UsernameSuggestions,
+
+    /// **Input**: `1` *username*,
+    /// **Output**: `0` *username*
     EditProfile(DataAccount),
+
+    /// **Input**: `1` *username*,
+    /// **Output**: `0` *username*
     BloksUsernameChange(DataAccount),
+
+    /// **Input**: `0` *username*,
+    /// **Output**: `0` *username*
     CurrentUser(SessionID),
 }
 

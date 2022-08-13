@@ -26,6 +26,10 @@ impl Response {
     pub fn raw(&self) -> &str {
         &self.raw
     }
+
+    pub fn available(&self) -> Option<&Vec<String>> {
+        self.usernames.as_ref()
+    }
 }
 
 impl Client {
@@ -70,6 +74,7 @@ impl Client {
         .text()
         .await?;
 
+        //TODO: remove `dbg!`
         let result = dbg!(request.is_ok(&text, users));
 
         Ok(Response::new(result.0, result.1, text))

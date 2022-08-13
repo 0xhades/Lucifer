@@ -7,11 +7,10 @@ mod test {
     use crate::client::Client;
     use reqwest::Proxy;
 
-    const SESSION_ID: &str =
-        "2204721379%3ACe7dYxZd3zOjyB%3A22%3AAYfl8NnG7glYKe3V5fpg2exE7C7yPQTY-Sl-UxBong";
+    const SESSION_ID: &str = "MISSING";
     const timeout: Duration = Duration::from_secs(10);
 
-    //#[ignore = "sessions aren't available"]
+    #[ignore = "sessions aren't available"]
     #[tokio::test]
     async fn get_profile() {
         let client = Client::new(timeout, None).unwrap();
@@ -34,7 +33,7 @@ mod test {
         println!("{:?}", account);
 
         let BloksUsernameChange = APIs::new(APIs::BloksUsernameChange(account));
-        let username = UsernameBuilder::new().single("0xhades").build();
+        let username = UsernameBuilder::new().single("0xhadesssapfpes").build();
         let resp = client
             .execute(&BloksUsernameChange, Some(&username))
             .await
@@ -48,7 +47,7 @@ mod test {
         let client = Client::new(timeout, None).unwrap();
         let check_username = APIs::new(APIs::CheckUsername);
 
-        let username = UsernameBuilder::new().single("0xhades").build();
+        let username = UsernameBuilder::new().single("0xhadesssapfpes").build();
         let resp = client
             .execute(&check_username, Some(&username))
             .await
@@ -62,7 +61,7 @@ mod test {
         let client = Client::new(timeout, None).unwrap();
         let create = APIs::new(APIs::Create);
 
-        let username = UsernameBuilder::new().single("0xhades").build();
+        let username = UsernameBuilder::new().single("0xhadesssapfpes").build();
         let resp = client.execute(&create, Some(&username)).await.unwrap();
 
         println!("{}", resp.raw());
@@ -73,7 +72,7 @@ mod test {
         let client = Client::new(timeout, None).unwrap();
         let CreateBusinessValidated = APIs::new(APIs::CreateBusinessValidated);
 
-        let username = UsernameBuilder::new().single("0xhades").build();
+        let username = UsernameBuilder::new().single("0xhadesssapfpes").build();
         let resp = client
             .execute(&CreateBusinessValidated, Some(&username))
             .await
@@ -87,7 +86,7 @@ mod test {
         let client = Client::new(timeout, None).unwrap();
         let CreateSecondaryAccount = APIs::new(APIs::CreateSecondaryAccount);
 
-        let username = UsernameBuilder::new().single("0xhades").build();
+        let username = UsernameBuilder::new().single("0xhadesssapfpes").build();
         let resp = client
             .execute(&CreateSecondaryAccount, Some(&username))
             .await
@@ -101,7 +100,9 @@ mod test {
         let client = Client::new(timeout, None).unwrap();
         let WebCreateAjax = APIs::new(APIs::WebCreateAjax);
 
-        let username = UsernameBuilder::new().single("0xhades").build();
+        let username = UsernameBuilder::new()
+            .multi(vec!["0xhadesssapfpes", "xbisony5fpes", "fpesqwilucifier"])
+            .build();
         let resp = client
             .execute(&WebCreateAjax, Some(&username))
             .await
@@ -115,7 +116,9 @@ mod test {
         let client = Client::new(timeout, None).unwrap();
         let UsernameSuggestions = APIs::new(APIs::UsernameSuggestions);
 
-        let username = UsernameBuilder::new().single("0xhades").build();
+        let username = UsernameBuilder::new()
+            .multi(vec!["0xhadesssapfpes", "xbisony5fpes", "fpesqwilucifier"])
+            .build();
         let resp = client
             .execute(&UsernameSuggestions, Some(&username))
             .await
