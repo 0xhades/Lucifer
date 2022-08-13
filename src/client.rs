@@ -74,9 +74,7 @@ impl Client {
         .text()
         .await?;
 
-        //TODO: remove `dbg!`
-        let result = dbg!(request.is_ok(&text, users));
-
-        Ok(Response::new(result.0, result.1, text))
+        let (status, result_usernames) = request.is_ok(&text, users);
+        Ok(Response::new(status, result_usernames, text))
     }
 }
