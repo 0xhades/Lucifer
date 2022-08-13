@@ -70,7 +70,7 @@ impl Client {
         .text()
         .await?;
 
-        let result = request.is_ok(&text, users);
+        let result = dbg!(request.is_ok(&text, users));
 
         Ok(Response::new(result.0, result.1, text))
     }
