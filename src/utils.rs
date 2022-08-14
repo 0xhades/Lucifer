@@ -1,6 +1,8 @@
 use std::fmt::Display;
 
-use super::style::PrintError;
+use crossterm::style::Color;
+
+use super::style::PrintlnError;
 
 pub fn handle<T, E>(result: Result<T, E>, message: &str, cast_error: bool, quit: bool) -> Option<T>
 where
@@ -9,7 +11,7 @@ where
     match result {
         Ok(t) => Some(t),
         Err(e) => {
-            PrintError(
+            PrintlnError(
                 {
                     if cast_error {
                         format!("{}: {}", message, e)
@@ -18,6 +20,8 @@ where
                     }
                 },
                 quit,
+                Color::Red,
+                Color::Cyan,
             )
             .ok();
             None

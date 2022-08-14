@@ -38,7 +38,9 @@ use crossterm::{
     ExecutableCommand, QueueableCommand,
 };
 use std::io::{stdout, Read, Write};
-use style::{clear, PrintColorful, PrintColorless, PrintError, PrintSuccess};
+use style::{
+    clear, PrintColorful, PrintlnColorful, PrintlnColorfulPlus, PrintlnError, PrintlnSuccess,
+};
 use utils::handle;
 
 /*
@@ -52,9 +54,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let config = match load_config().await {
         Ok(t) => t,
         _ => {
-            PrintColorful(
-                "Found no config, creating a new config with default values\n",
-                Color::Magenta,
+            PrintlnColorful(
+                "Found no config, creating a new config with default values",
+                Color::Grey,
             )?;
             save_config(&Config::default()).await?;
             tokio::time::sleep(Duration::from_millis(1500)).await;
@@ -64,8 +66,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     clear()?;
 
-    PrintColorful(config.title(), Color::Red)?;
-    PrintColorful("Coder: #0xhades\n", Color::Red)?;
+    PrintlnColorful(config.title(), Color::Red)?;
+
+    PrintColorful("Coder: ", Color::Cyan)?;
+    PrintlnColorful("#0xhades", Color::Yellow)?;
 
     if let Some(new_fd) = handle(
         raise_fd_limit(MAX_FD),
@@ -73,8 +77,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
         false,
         false,
     ) {
-        PrintSuccess(format!("Changed the FD limit to {} successfully\n", new_fd).as_str())?;
+        PrintlnSuccess(
+            format!("Changed the FD limit to {} successfully", new_fd).as_str(),
+            Color::Cyan,
+            Color::Red,
+        )?;
     }
+
+    PrintlnColorfulPlus("Welcome to lucifer!", Color::Cyan, Color::Red)?;
 
     Ok(())
 }
