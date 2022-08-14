@@ -7,8 +7,33 @@ mod test {
     use crate::client::Client;
     use reqwest::Proxy;
 
+    use tokio::{
+        fs::OpenOptions,
+        io::{AsyncReadExt, AsyncWriteExt},
+    };
+
     const SESSION_ID: &str = "54244227166%3Aa2jPBDB8NJZVnn%3A24";
     const TIMEOUT: Duration = Duration::from_secs(10);
+
+    #[tokio::test]
+    async fn create_file() {
+        let mut Opener = OpenOptions::new();
+
+        let mut file = Opener
+            .create(true)
+            .read(true)
+            .write(true)
+            .open("c:\\Users\\0xhades\\Desktop\\config.json")
+            .await
+            .unwrap();
+
+        file.write_all(b"hello world").await.unwrap();
+
+        let mut text = String::new();
+        file.read_to_string(&mut text).await.unwrap();
+
+        println!("{}", text);
+    }
 
     #[ignore]
     #[tokio::test]
@@ -22,7 +47,7 @@ mod test {
         println!("{:?}", account);
     }
 
-    //#[ignore]
+    #[ignore]
     #[tokio::test]
     async fn change_username_async() {
         let client = Client::new(TIMEOUT, None).unwrap();
