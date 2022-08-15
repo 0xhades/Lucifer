@@ -10,7 +10,7 @@ pub const BLOODY: &str = r#"
     ░  ░   ░     ░ ░       ░             ░  ░   ░     
                  ░                                    
 "#;
-
+  
 pub const LARRY3D: &str = r#"
 __                             ___               
 /\ \                      __  /'___\              

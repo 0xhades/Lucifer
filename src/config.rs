@@ -1,10 +1,14 @@
+use crossterm::style::Color;
 use serde::{Deserialize, Serialize};
+use std::path::Path;
+use std::process::exit;
 use std::{error::Error, time::Duration};
 use tokio::{
     fs::OpenOptions,
     io::{AsyncReadExt, AsyncWriteExt},
 };
 
+use super::style::PrintlnError;
 use super::titles::{ANSI_REGULAR, ANSI_SHADOW, BLOODY, LARRY3D};
 
 #[derive(Serialize, Deserialize)]
@@ -16,15 +20,82 @@ enum Title {
 }
 
 #[derive(Serialize, Deserialize)]
+enum ProxyType {
+    HTTP,
+    SOCKS5,
+    SOCKS4,
+    HTTPS,
+}
+
+#[derive(Serialize, Deserialize)]
 pub struct Config {
     title: Title,
     threads: u32,
     limit_per_thread: u32,
     timeout_request: Duration,
     timeout_connect_proxy: Duration,
+    proxy_type: ProxyType,
+    proxy_path: String,
+    username_path: String,
 }
 
 impl Config {
+    pub fn new(
+        title: &str,
+        proxy_type: &str,
+        proxy_path: &str,
+        threads: u32,
+        limit_per_thread: u32,
+        timeout_request: Duration,
+        timeout_connect_proxy: Duration,
+        username_path: &str,
+    ) -> Self {
+        let proxy_type = match proxy_type.trim().to_lowercase().as_str() {
+            "http" => ProxyType::HTTP,
+            "socks4" => ProxyType::SOCKS4,
+            "socks5" => ProxyType::SOCKS5,
+            "https" => ProxyType::HTTPS,
+            _ => {
+                PrintlnError(
+                    format!("Invalid proxy type: {}", proxy_type),
+                    true,
+                    Color::Red,
+                    Color::Cyan,
+                )
+                .unwrap();
+                exit(1)
+            }
+        };
+
+        let title = match title.trim().to_lowercase().as_str() {
+            "bloody" => Title::Bloody,
+            "larry" => Title::Larry3D,
+            "regular" => Title::AnsiRegular,
+            "shadow" => Title::AnsiShadow,
+            _ => {
+                PrintlnError(
+                    format!("Invalid title style: {}", title),
+                    true,
+                    Color::Red,
+                    Color::Cyan,
+                )
+                .unwrap();
+                exit(1)
+            }
+        };
+
+        Self {
+            title,
+            threads,
+            limit_per_thread,
+            timeout_request,
+            timeout_connect_proxy,
+            proxy_type,
+            proxy_path: proxy_path.to_string(),
+            username_path: username_path.to_string(),
+        }
+    }
+
     pub fn title(&self) -> &str {
         match self.title {
             Title::Bloody => BLOODY,
@@ -49,16 +120,76 @@ impl Config {
     pub fn timeout_connect_proxy(&self) -> Duration {
         self.timeout_connect_proxy
     }
+
+    pub fn proxy_path(&self) -> String {
+        self.proxy_path.clone()
+    }
+
+    pub fn username_path(&self) -> String {
+        self.username_path.clone()
+    }
+
+    pub fn resolve_proxy_path(&mut self) -> bool {
+        if self.proxy_path == "$" {
+            let files = ["proxy.txt", "proxies.txt", "p.txt", "ip.txt", "ips.txt"].into_iter();
+            let exists = files
+                .filter(|f| Path::new(f).is_file())
+                .collect::<Vec<&str>>();
+
+            if exists.len() != 0 {
+                self.proxy_path = exists.get(0).unwrap().to_string();
+                return true;
+            }
+            return false;
+        }
+
+        if Path::new(&self.proxy_path).is_file() {
+            return true;
+        }
+
+        false
+    }
+
+    pub fn resolve_username_path(&mut self) -> bool {
+        if self.username_path == "$" {
+            let files = [
+                "username.txt",
+                "usernames.txt",
+                "u.txt",
+                "users.txt",
+                "use.txt",
+            ]
+            .into_iter();
+            let exists = files
+                .filter(|f| Path::new(f).is_file())
+                .collect::<Vec<&str>>();
+
+            if exists.len() != 0 {
+                self.username_path = exists.get(0).unwrap().to_string();
+                return true;
+            }
+            return false;
+        }
+
+        if Path::new(&self.username_path).is_file() {
+            return true;
+        }
+
+        false
+    }
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
-            title: Title::Bloody,
+            title: Title::Larry3D,
             threads: 15,
             limit_per_thread: 100,
             timeout_request: Duration::from_secs(5),
             timeout_connect_proxy: Duration::from_secs(5),
+            proxy_path: String::from("$"),
+            proxy_type: ProxyType::HTTP,
+            username_path: String::from("$"),
         }
     }
 }
@@ -74,9 +205,9 @@ pub async fn save_config(config: &Config) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-pub async fn load_config() -> Result<Config, Box<dyn Error>> {
+pub async fn load_config(path: &str) -> Result<Config, Box<dyn Error>> {
     let mut opener = OpenOptions::new();
-    let mut file = opener.read(true).open("config.json").await?;
+    let mut file = opener.read(true).open(path).await?;
 
     let mut raw_config = String::new();
     file.read_to_string(&mut raw_config).await?;

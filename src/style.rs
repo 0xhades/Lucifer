@@ -60,6 +60,23 @@ where
     Ok(())
 }
 
+pub fn PrintlnErrorQuit<T>(error: T, primary: Color, secondary: Color) -> !
+where
+    T: Display,
+{
+    PrintColorful("[", secondary).unwrap_or_else(|_| exit(1));
+    PrintColorful("!", primary).unwrap_or_else(|_| exit(1));
+    PrintColorful("] ", secondary).unwrap_or_else(|_| exit(1));
+
+    PrintColorful(
+        format!("{}\n", error.to_string().as_str()).as_str(),
+        primary,
+    )
+    .unwrap_or_else(|_| exit(1));
+
+    exit(1);
+}
+
 pub fn PrintSuccess<T>(message: T, primary: Color, secondary: Color) -> Result<(), Box<dyn Error>>
 where
     T: Display,
