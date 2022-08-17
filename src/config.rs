@@ -37,6 +37,7 @@ pub struct Config {
     proxy_type: ProxyType,
     proxy_path: String,
     username_path: String,
+    sessions_path: String,
     infinte: bool,
 }
 
@@ -50,6 +51,7 @@ impl Config {
         timeout_request: Duration,
         timeout_connect_proxy: Duration,
         username_path: &str,
+        sessions_path: &str,
         infinte: bool,
     ) -> Self {
         let proxy_type = match proxy_type.trim().to_lowercase().as_str() {
@@ -95,6 +97,7 @@ impl Config {
             proxy_type,
             proxy_path: proxy_path.to_string(),
             username_path: username_path.to_string(),
+            sessions_path: sessions_path.to_string(),
             infinte,
         }
     }
@@ -126,6 +129,10 @@ impl Config {
 
     pub fn proxy_path(&self) -> String {
         self.proxy_path.clone()
+    }
+
+    pub fn session_path(&self) -> String {
+        self.sessions_path.clone()
     }
 
     pub fn username_path(&self) -> String {
@@ -164,7 +171,7 @@ impl Config {
                 "usernames.txt",
                 "u.txt",
                 "users.txt",
-                "use.txt",
+                "user.txt",
             ]
             .into_iter();
             let exists = files
@@ -184,6 +191,34 @@ impl Config {
 
         false
     }
+
+    pub fn resolve_sessions_path(&mut self) -> bool {
+        if self.sessions_path == "$" {
+            let files = [
+                "session.txt",
+                "sessions.txt",
+                "s.txt",
+                "sessionid.txt",
+                "sessionids.txt",
+            ]
+            .into_iter();
+            let exists = files
+                .filter(|f| Path::new(f).is_file())
+                .collect::<Vec<&str>>();
+
+            if exists.len() != 0 {
+                self.sessions_path = exists.get(0).unwrap().to_string();
+                return true;
+            }
+            return false;
+        }
+
+        if Path::new(&self.sessions_path).is_file() {
+            return true;
+        }
+
+        false
+    }
 }
 
 impl Default for Config {
@@ -197,6 +232,7 @@ impl Default for Config {
             proxy_path: String::from("$"),
             proxy_type: ProxyType::HTTP,
             username_path: String::from("$"),
+            sessions_path: String::from("$"),
             infinte: true,
         }
     }

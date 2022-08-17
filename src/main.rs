@@ -118,6 +118,13 @@ fn main() -> Result<(), Box<dyn Error>> {
                         .value_name("FILE")
                         .default_value("$")
                         .takes_value(true),
+                    Arg::with_name("session")
+                        .short('g')
+                        .long("session")
+                        .help("The path to the session IDs file.")
+                        .value_name("FILE")
+                        .default_value("$")
+                        .takes_value(true),
                     Arg::with_name("username")
                         .short('u')
                         .long("username")
@@ -169,6 +176,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut proxies_type = "http";
     let mut proxies_path = "$";
     let mut username_path = "$";
+    let mut sessions_path = "$";
     let mut endless = true;
 
     let mut user_input_config = false;
@@ -212,6 +220,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             proxies_path = sub_matches.get_one::<String>("proxy").expect("required");
 
             username_path = sub_matches.get_one::<String>("username").expect("required");
+
+            sessions_path = sub_matches.get_one::<String>("session").expect("required");
 
             proxies_type = sub_matches.get_one::<String>("type").expect("required");
 
@@ -293,6 +303,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             request_timeout,
             connect_timeout,
             username_path,
+            sessions_path,
             endless,
         );
 
@@ -324,6 +335,17 @@ fn main() -> Result<(), Box<dyn Error>> {
         );
     };
 
+    if !config.resolve_sessions_path() {
+        PrintlnErrorQuit(
+            format!(
+                "Couldn't load any session IDs file: {}",
+                config.session_path()
+            ),
+            Color::Red,
+            Color::Cyan,
+        );
+    };
+
     PrintlnColorfulPlus("Loading..", Color::Cyan, Color::Red)?;
     thread::sleep(Duration::from_millis(1500));
 
@@ -348,7 +370,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     thread::sleep(Duration::from_millis(1500));
 
-    let mut runner = Runner::new(config, {
+    let runner = Runner::new(config, {
         if changed_fd.0 {
             vec![(changed_fd.1, Status::success())]
         } else {
