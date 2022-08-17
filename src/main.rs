@@ -1,7 +1,16 @@
-#![allow(dead_code, non_snake_case, unused_must_use)]
-//TODO: fix all warnings and not ignoring them
+//FIXME: fix all warnings and not ignoring them
+#![allow(
+    dead_code,
+    non_snake_case,
+    unused_must_use,
+    unused_imports,
+    unused_variables,
+    non_camel_case_types,
+    unused_assignments
+)]
 mod api;
 mod app;
+mod checker;
 mod client;
 mod config;
 mod endpoints;

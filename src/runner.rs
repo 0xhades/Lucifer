@@ -1,4 +1,5 @@
 use super::app::App;
+use super::checker::Checker;
 use super::ui;
 use super::Config;
 use crossterm::{
@@ -8,6 +9,9 @@ use crossterm::{
 };
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
 use std::sync::{mpsc, Arc};
 use std::thread;
 use std::{error::Error, time::Duration};
@@ -15,7 +19,6 @@ use std::{
     io::{stdout, Read, Write},
     time::Instant,
 };
-use tokio::sync::Mutex;
 use tui::{
     backend::{Backend, CrosstermBackend},
     layout::{Constraint, Direction, Layout},
@@ -30,7 +33,7 @@ pub enum AppEvent {
     Taken(String),
     Error(String),
     Miss(String),
-    Log(String),
+    Log((String, String)),
 }
 
 pub struct Runner {
@@ -98,24 +101,18 @@ impl Runner {
     pub fn pop_error<'a>(&mut self) -> Option<String> {
         self.errors.pop()
     }
-    pub fn push_log(&mut self) {}
-    pub fn push_hunt(&mut self) {}
-    pub fn push_taken(&mut self) {}
-    pub fn push_error(&mut self) {}
-}
-
-type counter = Arc<Mutex<usize>>;
-
-/// the actual application's logic
-pub fn checker(
-    ValidTotal: counter,
-    TakenTotal: counter,
-    ErrorTotal: counter,
-    MissTotal: counter,
-    HuntsTotal: counter,
-    RS: counter,
-) -> Option<String> {
-    None
+    pub fn push_log(&mut self, log: (String, String)) {
+        self.log.push(log);
+    }
+    pub fn push_hunt(&mut self, hunt: String) {
+        self.hunt.push(hunt);
+    }
+    pub fn push_taken(&mut self, taken: String) {
+        self.taken.push(taken);
+    }
+    pub fn push_error(&mut self, error: String) {
+        self.errors.push(error);
+    }
 }
 
 pub fn run_app<B: Backend>(
@@ -127,23 +124,31 @@ pub fn run_app<B: Backend>(
 ) -> Result<(), Box<dyn Error>> {
     let (tx, rx) = mpsc::channel::<AppEvent>();
 
-    // The total valid attempts = (Taken + Hunts + Miss)
-    let ValidTotal = Arc::new(Mutex::new(0usize));
-    let TakenTotal = Arc::new(Mutex::new(0usize));
-    let ErrorTotal = Arc::new(Mutex::new(0usize));
-    let MissTotal = Arc::new(Mutex::new(0usize));
-    let HuntsTotal = Arc::new(Mutex::new(0usize));
-    let RS = Arc::new(Mutex::new(0usize));
+    let shared_config = Arc::new(config);
+    let should_quit = Arc::new(AtomicBool::new(false));
+    let TakenTotal = Arc::new(AtomicUsize::new(0));
+    let ErrorTotal = Arc::new(AtomicUsize::new(0));
+    let MissTotal = Arc::new(AtomicUsize::new(0));
+    let RS = Arc::new(AtomicUsize::new(0));
 
-    let (valids, takens, errors, misses, hunts, rs) = (
-        Arc::clone(&ValidTotal),
+    let shared = (
         Arc::clone(&TakenTotal),
         Arc::clone(&ErrorTotal),
         Arc::clone(&MissTotal),
-        Arc::clone(&HuntsTotal),
         Arc::clone(&RS),
+        Arc::clone(&should_quit),
     );
-    let handle = thread::spawn(|| checker(valids, takens, errors, misses, hunts, rs));
+
+    let checker = Checker::new(
+        shared_config,
+        shared.0,
+        shared.1,
+        shared.2,
+        shared.3,
+        tx,
+        shared.4,
+    );
+    let handle = thread::spawn(move || checker.run());
 
     let mut last_tick = Instant::now();
     loop {
@@ -163,16 +168,55 @@ pub fn run_app<B: Backend>(
             }
         }
 
+        if let Ok(evt) = rx.try_recv() {
+            let mut runner = runner.borrow_mut();
+            match evt {
+                AppEvent::Hunt(username) => runner.push_hunt(username),
+                AppEvent::Taken(username) => runner.push_taken(username),
+                AppEvent::Error(username) => runner.push_error(username),
+                AppEvent::Log(log) => runner.push_log(log),
+                AppEvent::Miss(_) => (),
+            }
+        }
+
         if last_tick.elapsed() >= tick_rate {
+            let mut takens = 0;
+            {
+                takens = TakenTotal.load(Ordering::Relaxed).clone();
+            }
+
+            let mut errors = 0;
+            {
+                errors = ErrorTotal.load(Ordering::Relaxed).clone();
+            }
+
+            let mut misses = 0;
+            {
+                misses = MissTotal.load(Ordering::Relaxed).clone();
+            }
+
+            let mut rs = 0;
+            {
+                rs = RS.load(Ordering::Relaxed).clone();
+            }
+
+            app.error = errors;
+            app.taken = takens;
+            app.miss = misses;
+            app.requests_per_seconds = rs;
+
             app.on_tick();
             last_tick = Instant::now();
         }
 
-        if app.should_quit {
-            if let Some(e) = handle.join().unwrap() {
-                return Err(e.into());
-            }
-            return Ok(());
+        if !app.should_quit {
+            continue;
         }
+
+        should_quit.store(true, Ordering::Release);
+        if let Some(e) = handle.join().unwrap() {
+            return Err(e.into());
+        }
+        return Ok(());
     }
 }

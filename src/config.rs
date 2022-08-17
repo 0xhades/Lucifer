@@ -20,7 +20,7 @@ enum Title {
 }
 
 #[derive(Serialize, Deserialize, Clone)]
-enum ProxyType {
+pub enum ProxyType {
     HTTP,
     SOCKS5,
     SOCKS4,
@@ -125,6 +125,10 @@ impl Config {
 
     pub fn timeout_connect_proxy(&self) -> Duration {
         self.timeout_connect_proxy
+    }
+
+    pub fn proxy_type(&self) -> ProxyType {
+        self.proxy_type.clone()
     }
 
     pub fn proxy_path(&self) -> String {

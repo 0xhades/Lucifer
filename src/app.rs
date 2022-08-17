@@ -154,6 +154,7 @@ impl App {
     }
 
     pub fn on_tick(&mut self) {
+        //TODO: figure how to use progress
         // Update progress
         self.progress += 0.001;
         if self.progress > 1.0 {
