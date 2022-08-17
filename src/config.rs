@@ -206,7 +206,12 @@ pub async fn save_config(config: &Config) -> Result<(), Box<dyn Error>> {
     let serialized_config = serde_json::to_string(config)?;
 
     let mut opener = OpenOptions::new();
-    let mut file = opener.create(true).write(true).open("config.json").await?;
+    let mut file = opener
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open("config.json")
+        .await?;
 
     file.write_all(serialized_config.as_bytes()).await?;
 
@@ -215,10 +220,23 @@ pub async fn save_config(config: &Config) -> Result<(), Box<dyn Error>> {
 
 pub async fn load_config(path: &str) -> Result<Config, Box<dyn Error>> {
     let mut opener = OpenOptions::new();
-    let mut file = opener.read(true).open(path).await?;
+    let mut file = opener.read(true).write(true).open(path).await?;
 
     let mut raw_config = String::new();
     file.read_to_string(&mut raw_config).await?;
+    file.shutdown().await?;
+
+    if raw_config.ends_with("}}") {
+        let mut opener = OpenOptions::new();
+        let mut file = opener
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(path)
+            .await?;
+        raw_config.remove(raw_config.len() - 1);
+        file.write_all(raw_config.as_bytes()).await?;
+    }
 
     let config = serde_json::from_str::<Config>(&raw_config)?;
     Ok(config)

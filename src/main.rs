@@ -133,7 +133,11 @@ fn main() -> Result<(), Box<dyn Error>> {
                         .takes_value(true),
                 ]),
         )
-        .subcommand(Command::new("default").about("Run with the default config."))
+        .subcommand(
+            Command::new("default")
+                .about("Run with the default config.")
+                .subcommand(Command::new("save").about("Save and run with the default config.")),
+        )
         .subcommand(
             Command::new("load")
                 .about("Load config file and run.")
@@ -228,6 +232,21 @@ fn main() -> Result<(), Box<dyn Error>> {
                 default_config_path = true;
                 path = "config.json"
             }
+        }
+        Some(("default", sub_matches)) => {
+            match sub_matches.subcommand() {
+                Some(("save", sub_m)) => {
+                    config = Config::default();
+                    if let Err(e) = rt.block_on(save_config(&config)) {
+                        PrintlnErrorQuit(
+                            format!("Couldn't save the config to file: {}", e),
+                            Color::Red,
+                            Color::Cyan,
+                        );
+                    };
+                }
+                _ => (),
+            };
         }
         _ => (),
     }
