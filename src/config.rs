@@ -37,6 +37,7 @@ pub struct Config {
     proxy_type: ProxyType,
     proxy_path: String,
     username_path: String,
+    infinte: bool,
 }
 
 impl Config {
@@ -49,6 +50,7 @@ impl Config {
         timeout_request: Duration,
         timeout_connect_proxy: Duration,
         username_path: &str,
+        infinte: bool,
     ) -> Self {
         let proxy_type = match proxy_type.trim().to_lowercase().as_str() {
             "http" => ProxyType::HTTP,
@@ -93,6 +95,7 @@ impl Config {
             proxy_type,
             proxy_path: proxy_path.to_string(),
             username_path: username_path.to_string(),
+            infinte,
         }
     }
 
@@ -127,6 +130,10 @@ impl Config {
 
     pub fn username_path(&self) -> String {
         self.username_path.clone()
+    }
+
+    pub fn infinte(&self) -> bool {
+        self.infinte
     }
 
     pub fn resolve_proxy_path(&mut self) -> bool {
@@ -190,6 +197,7 @@ impl Default for Config {
             proxy_path: String::from("$"),
             proxy_type: ProxyType::HTTP,
             username_path: String::from("$"),
+            infinte: true,
         }
     }
 }

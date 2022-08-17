@@ -1,11 +1,10 @@
 #[cfg(test)]
 
 mod test {
-    use std::{error::Error, time::Duration};
+    use std::time::Duration;
 
     use crate::api::{APIs, DataAccount, UsernameBuilder};
     use crate::client::Client;
-    use reqwest::Proxy;
 
     use tokio::{
         fs::OpenOptions,

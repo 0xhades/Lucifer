@@ -1,14 +1,13 @@
 use crossterm::{
     cursor, execute,
-    style::{Color, Print, ResetColor, SetBackgroundColor, SetForegroundColor},
+    style::{Color, Print, ResetColor, SetForegroundColor},
     terminal::{self, ClearType},
-    ExecutableCommand, QueueableCommand,
 };
 use std::{fmt::Display, process::exit, time::Duration};
 
 use std::{
     error::Error,
-    io::{stderr, stdin, stdout},
+    io::{stdin, stdout},
 };
 
 pub fn clear() -> Result<(), Box<dyn Error>> {

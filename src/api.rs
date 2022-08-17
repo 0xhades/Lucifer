@@ -1,6 +1,5 @@
 use base64::encode as base64encode;
 use rand::{distributions::Alphanumeric, rngs::ThreadRng, seq::SliceRandom, thread_rng, Rng};
-use regex::Regex;
 use reqwest::header::{HeaderMap, ACCEPT_LANGUAGE, AUTHORIZATION, COOKIE, USER_AGENT};
 use serde_json;
 use std::collections::HashMap;

@@ -1,11 +1,14 @@
-#![allow(dead_code, non_snake_case, unused_imports, unreachable_code)]
+#![allow(dead_code, non_snake_case, unused_must_use)]
 mod api;
+mod app;
 mod client;
 mod config;
 mod endpoints;
+mod runner;
 mod style;
 mod tests;
 mod titles;
+mod ui;
 mod useragents;
 mod utils;
 
@@ -23,23 +26,14 @@ use windows::{raise_fd_limit, MAX_FD};
 #[cfg(target_family = "unix")]
 use unix::{raise_fd_limit, MAX_FD};
 
-use api::{APIs, DataAccount, UsernameBuilder};
+use app::Status;
 use clap::{Arg, Command};
-use client::Client;
 use config::{load_config, save_config, Config};
-use crossterm::{
-    cursor, execute,
-    style::{Color, Print, ResetColor, SetBackgroundColor, SetForegroundColor},
-    terminal::{self, ClearType},
-    ExecutableCommand, QueueableCommand,
-};
-use reqwest::Proxy;
+use crossterm::style::Color;
+use runner::Runner;
 use std::path::Path;
+use std::thread;
 use std::{error::Error, time::Duration};
-use std::{
-    io::{stdout, Read, Write},
-    process::exit,
-};
 use style::{
     clear, PrintColorful, PrintlnColorful, PrintlnColorfulPlus, PrintlnError, PrintlnErrorQuit,
     PrintlnSuccess,
@@ -53,9 +47,13 @@ TODO:
     - Command Line options [✔]
 */
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<(), Box<dyn Error>> {
     clear()?;
+
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .worker_threads(5)
+        .build()?;
 
     PrintlnColorful(titles::LARRY3D, Color::Red)?;
     PrintColorful("Coder: ", Color::Cyan)?;
@@ -79,6 +77,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         .value_name("NUMBER")
                         .default_value("15")
                         .takes_value(true),
+                    Arg::with_name("once")
+                        .short('o')
+                        .long("once")
+                        .help("Add this argument to run through the list once and not infinitely.")
+                        .required(false),
                     Arg::with_name("limit")
                         .short('l')
                         .long("limit")
@@ -105,7 +108,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         .long("title")
                         .help("Sets the program title style [bloody, larry, regular, shadow].")
                         .value_name("STYLE")
-                        .default_value("bloody")
+                        .default_value("larry")
                         .takes_value(true),
                     Arg::with_name("proxy")
                         .short('p')
@@ -161,6 +164,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut proxies_type = "http";
     let mut proxies_path = "$";
     let mut username_path = "$";
+    let mut endless = true;
 
     let mut user_input_config = false;
     let mut default_config_path = false;
@@ -200,21 +204,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .unwrap();
             title = sub_matches.get_one::<String>("title").expect("required");
 
-            let s = sub_matches.get_one::<String>("proxy").expect("required");
-            if Path::new(s).is_file() {
-                proxies_path = s;
-            } else {
-                PrintlnErrorQuit(format!("Couldn't load: {}", s), Color::Red, Color::Cyan);
-            }
+            proxies_path = sub_matches.get_one::<String>("proxy").expect("required");
 
-            let s = sub_matches.get_one::<String>("username").expect("required");
-            if Path::new(s).is_file() {
-                username_path = s;
-            } else {
-                PrintlnErrorQuit(format!("Couldn't load: {}", s), Color::Red, Color::Cyan);
-            }
+            username_path = sub_matches.get_one::<String>("username").expect("required");
 
             proxies_type = sub_matches.get_one::<String>("type").expect("required");
+
+            endless = !sub_matches.is_present("once");
         }
         Some(("load", sub_matches)) => {
             if sub_matches.is_present("path") {
@@ -222,7 +218,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 if Path::new(s).is_file() {
                     path = s;
                 } else {
-                    PrintlnErrorQuit(format!("Couldn't load: {}", s), Color::Red, Color::Cyan);
+                    PrintlnErrorQuit(
+                        format!("Couldn't load config from: {}", s),
+                        Color::Red,
+                        Color::Cyan,
+                    );
                 }
             } else {
                 default_config_path = true;
@@ -241,7 +241,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 Color::Cyan,
             )?;
             config = Config::default();
-            if let Err(e) = save_config(&config).await {
+            if let Err(e) = rt.block_on(save_config(&config)) {
                 PrintlnErrorQuit(
                     format!("Couldn't save the config to file: {}", e),
                     Color::Red,
@@ -250,7 +250,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             };
         }
     } else {
-        config = match load_config(path).await {
+        config = match rt.block_on(load_config(path)) {
             Ok(c) => c,
             Err(e) => PrintlnErrorQuit(
                 format!(
@@ -273,9 +273,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
             request_timeout,
             connect_timeout,
             username_path,
+            endless,
         );
 
-        if let Err(e) = save_config(&config).await {
+        if let Err(e) = rt.block_on(save_config(&config)) {
             PrintlnErrorQuit(
                 format!("Couldn't save the config to file: {}", e),
                 Color::Red,
@@ -304,7 +305,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     };
 
     PrintlnColorfulPlus("Loading..", Color::Cyan, Color::Red)?;
-    tokio::time::sleep(Duration::from_secs(2)).await;
+    thread::sleep(Duration::from_millis(1500));
 
     clear()?;
 
@@ -312,20 +313,35 @@ async fn main() -> Result<(), Box<dyn Error>> {
     PrintColorful("Coder: ", Color::Cyan)?;
     PrintlnColorful("#0xhades", Color::Yellow)?;
 
+    let mut changed_fd = (false, String::new());
+
     if let Some(new_fd) = handle(
         raise_fd_limit(MAX_FD),
         "Couldn't change the FD limit\n",
         false,
         false,
     ) {
-        PrintlnSuccess(
-            format!("Changed the FD limit to {} successfully", new_fd).as_str(),
-            Color::Cyan,
-            Color::Red,
-        )?;
+        changed_fd = (true, format!("fds -> {}", new_fd));
     }
 
-    PrintlnColorfulPlus("Welcome to lucifer!", Color::Cyan, Color::Red)?;
+    PrintlnColorfulPlus("Running..", Color::Cyan, Color::Red)?;
+
+    thread::sleep(Duration::from_millis(1500));
+
+    let mut runner = Runner::new(config, {
+        if changed_fd.0 {
+            vec![(changed_fd.1, Status::success())]
+        } else {
+            vec![("Couldn't change fds".to_string(), Status::error())]
+        }
+    });
+    rt.block_on(rt.spawn_blocking(move || {
+        if let Err(e) = runner.run() {
+            PrintlnErrorQuit(format!("An error occurred: {}", e), Color::Red, Color::Cyan);
+        }
+        PrintlnColorfulPlus("Thanks for using lucifer!", Color::Cyan, Color::Red).unwrap();
+    }))
+    .unwrap_or_else(|_| ());
 
     Ok(())
 }
