@@ -148,9 +148,9 @@ where
     );
     f.render_stateful_widget(logs, chunks[0], &mut app.logs.state);
 
-    // Draw available
-    let available: Vec<ListItem> = app
-        .available
+    // Draw hunt
+    let hunt: Vec<ListItem> = app
+        .hunt
         .items
         .iter()
         .map(|i| {
@@ -160,12 +160,12 @@ where
             ))])
         })
         .collect();
-    let available = List::new(available).block(
+    let hunt = List::new(hunt).block(
         Block::default()
             .borders(Borders::ALL)
-            .title(Span::styled("Available", Style::default().fg(Color::Green))),
+            .title(Span::styled("Hunts", Style::default().fg(Color::Green))),
     );
-    f.render_stateful_widget(available, chunks[1], &mut app.available.state);
+    f.render_stateful_widget(hunt, chunks[1], &mut app.hunt.state);
 
     // Draw taken
     let taken: Vec<ListItem> = app
@@ -201,7 +201,7 @@ where
     let error = List::new(error).block(
         Block::default()
             .borders(Borders::ALL)
-            .title(Span::styled("Error", Style::default().fg(Color::Red))),
+            .title(Span::styled("Error/Miss", Style::default().fg(Color::Red))),
     );
     f.render_stateful_widget(error, chunks[3], &mut app.errors.state);
 }
@@ -232,8 +232,8 @@ where
 
     let text = vec![
         Spans::from(vec![
-            Span::styled("Available: ", Style::default().fg(Color::LightGreen)),
-            Span::raw(app.available.items.len().to_string()),
+            Span::styled("Hunts: ", Style::default().fg(Color::LightGreen)),
+            Span::raw(app.hunt.items.len().to_string()),
         ]),
         Spans::from(vec![
             Span::styled("Taken: ", Style::default().fg(Color::LightMagenta)),
@@ -244,8 +244,15 @@ where
             Span::raw(app.error.to_string()),
         ]),
         Spans::from(vec![
-            Span::styled("Infinite: ", Style::default().fg(Color::Yellow)),
-            Span::raw(app.infinte.to_string()),
+            Span::styled("Total Attempts: ", Style::default().fg(Color::Yellow)),
+            Span::raw((app.taken + app.hunt.items.len() + app.miss).to_string()),
+        ]),
+        Spans::from(vec![
+            Span::styled(
+                "Requests Per Seconds: ",
+                Style::default().fg(Color::LightBlue),
+            ),
+            Span::raw(app.requests_per_seconds.to_string()),
         ]),
     ];
 

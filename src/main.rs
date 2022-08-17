@@ -1,4 +1,5 @@
 #![allow(dead_code, non_snake_case, unused_must_use)]
+//TODO: fix all warnings and not ignoring them
 mod api;
 mod app;
 mod client;

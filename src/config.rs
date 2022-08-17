@@ -11,7 +11,7 @@ use tokio::{
 use super::style::PrintlnError;
 use super::titles::{ANSI_REGULAR, ANSI_SHADOW, BLOODY, LARRY3D};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 enum Title {
     Bloody,
     Larry3D,
@@ -19,7 +19,7 @@ enum Title {
     AnsiRegular,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 enum ProxyType {
     HTTP,
     SOCKS5,
@@ -27,7 +27,7 @@ enum ProxyType {
     HTTPS,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Config {
     title: Title,
     threads: u32,

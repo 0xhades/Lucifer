@@ -6,7 +6,10 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use std::sync::Arc;
+use std::cell::RefCell;
+use std::rc::Rc;
+use std::sync::{mpsc, Arc};
+use std::thread;
 use std::{error::Error, time::Duration};
 use std::{
     io::{stdout, Read, Write},
@@ -22,26 +25,34 @@ use tui::{
     Terminal,
 };
 
+pub enum AppEvent {
+    Hunt(String),
+    Taken(String),
+    Error(String),
+    Miss(String),
+    Log(String),
+}
+
 pub struct Runner {
     config: Config,
-    available: Arc<Mutex<Vec<String>>>,
-    taken: Arc<Mutex<Vec<String>>>,
-    errors: Arc<Mutex<Vec<String>>>,
-    log: Arc<Mutex<Vec<(String, String)>>>,
+    hunt: Vec<String>,
+    taken: Vec<String>,
+    errors: Vec<String>,
+    log: Vec<(String, String)>,
 }
 
 impl Runner {
     pub fn new(config: Config, previous_logs: Vec<(String, String)>) -> Self {
         Self {
             config,
-            available: Arc::new(Mutex::new(Vec::new())),
-            taken: Arc::new(Mutex::new(Vec::new())),
-            errors: Arc::new(Mutex::new(Vec::new())),
-            log: Arc::new(Mutex::new(previous_logs)),
+            hunt: Vec::new(),
+            taken: Vec::new(),
+            errors: Vec::new(),
+            log: previous_logs,
         }
     }
 
-    pub fn run(&mut self) -> Result<(), Box<dyn Error>> {
+    pub fn run(self) -> Result<(), Box<dyn Error>> {
         // setup terminal
         enable_raw_mode()?;
         let mut stdout = stdout();
@@ -49,11 +60,19 @@ impl Runner {
         let backend = CrosstermBackend::new(stdout);
         let mut terminal = Terminal::new(backend)?;
 
-        //TODO: run it in background
+        let config = self.config.clone();
+
+        // warp self into reference-counting pointer
+        let this = Rc::new(RefCell::new(self));
         // create app and run it
         let tick_rate = Duration::from_millis(250);
-        let app = App::new("Lucifer".to_string(), self, true, self.config.infinte());
-        run_app(&mut terminal, app, tick_rate)?;
+        let app = App::new(
+            "Lucifer".to_string(),
+            Rc::clone(&this),
+            true,
+            config.infinte(),
+        );
+        run_app(&mut terminal, app, config, this, tick_rate);
 
         // restore terminal
         disable_raw_mode()?;
@@ -68,28 +87,64 @@ impl Runner {
     }
 
     pub fn pop_log<'a>(&mut self) -> Option<(String, String)> {
-        self.log.blocking_lock().pop()
+        self.log.pop()
     }
-    pub fn pop_available<'a>(&mut self) -> Option<String> {
-        self.available.blocking_lock().pop()
+    pub fn pop_hunt<'a>(&mut self) -> Option<String> {
+        self.hunt.pop()
     }
     pub fn pop_taken<'a>(&mut self) -> Option<String> {
-        self.taken.blocking_lock().pop()
+        self.taken.pop()
     }
     pub fn pop_error<'a>(&mut self) -> Option<String> {
-        self.errors.blocking_lock().pop()
+        self.errors.pop()
     }
     pub fn push_log(&mut self) {}
-    pub fn push_available(&mut self) {}
+    pub fn push_hunt(&mut self) {}
     pub fn push_taken(&mut self) {}
     pub fn push_error(&mut self) {}
+}
+
+type counter = Arc<Mutex<usize>>;
+
+/// the actual application's logic
+pub fn checker(
+    ValidTotal: counter,
+    TakenTotal: counter,
+    ErrorTotal: counter,
+    MissTotal: counter,
+    HuntsTotal: counter,
+    RS: counter,
+) -> Option<String> {
+    None
 }
 
 pub fn run_app<B: Backend>(
     terminal: &mut Terminal<B>,
     mut app: App,
+    config: Config,
+    runner: Rc<RefCell<Runner>>,
     tick_rate: Duration,
 ) -> Result<(), Box<dyn Error>> {
+    let (tx, rx) = mpsc::channel::<AppEvent>();
+
+    // The total valid attempts = (Taken + Hunts + Miss)
+    let ValidTotal = Arc::new(Mutex::new(0usize));
+    let TakenTotal = Arc::new(Mutex::new(0usize));
+    let ErrorTotal = Arc::new(Mutex::new(0usize));
+    let MissTotal = Arc::new(Mutex::new(0usize));
+    let HuntsTotal = Arc::new(Mutex::new(0usize));
+    let RS = Arc::new(Mutex::new(0usize));
+
+    let (valids, takens, errors, misses, hunts, rs) = (
+        Arc::clone(&ValidTotal),
+        Arc::clone(&TakenTotal),
+        Arc::clone(&ErrorTotal),
+        Arc::clone(&MissTotal),
+        Arc::clone(&HuntsTotal),
+        Arc::clone(&RS),
+    );
+    let handle = thread::spawn(|| checker(valids, takens, errors, misses, hunts, rs));
+
     let mut last_tick = Instant::now();
     loop {
         terminal.draw(|f| ui::draw(f, &mut app))?;
@@ -107,11 +162,16 @@ pub fn run_app<B: Backend>(
                 }
             }
         }
+
         if last_tick.elapsed() >= tick_rate {
             app.on_tick();
             last_tick = Instant::now();
         }
+
         if app.should_quit {
+            if let Some(e) = handle.join().unwrap() {
+                return Err(e.into());
+            }
             return Ok(());
         }
     }

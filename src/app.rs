@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use super::runner::Runner;
 use tokio::sync::Mutex;
@@ -20,20 +20,22 @@ impl Status {
     }
 }
 
-pub struct App<'a> {
+pub struct App {
     pub title: String,
     pub should_quit: bool,
     pub progress: f64,
-    pub taken: u64,
-    pub error: u64,
-    pub available: StatefulList<String>,
+    pub taken: usize,
+    pub miss: usize,
+    pub error: usize,
+    pub requests_per_seconds: usize,
+    pub hunt: StatefulList<String>,
     pub takens: StatefulList<String>,
     pub errors: StatefulList<String>,
     pub logs: StatefulList<(String, String)>,
     pub tabs: TabsState,
     pub enhanced_graphics: bool,
     pub infinte: bool,
-    pub runner: &'a mut Runner,
+    pub runner: Rc<RefCell<Runner>>,
 }
 
 pub struct StatefulList<T> {
@@ -107,15 +109,20 @@ impl TabsState {
     }
 }
 
-impl App<'_> {
-    pub fn new(title: String, runner: &mut Runner, enhanced_graphics: bool, infinte: bool) -> App {
+impl App {
+    pub fn new(
+        title: String,
+        runner: Rc<RefCell<Runner>>,
+        enhanced_graphics: bool,
+        infinte: bool,
+    ) -> App {
         App {
             title,
             should_quit: false,
             progress: 0.0,
             taken: 0,
             error: 0,
-            available: StatefulList::new(),
+            hunt: StatefulList::new(),
             takens: StatefulList::new(),
             errors: StatefulList::new(),
             logs: StatefulList::new(),
@@ -123,6 +130,8 @@ impl App<'_> {
             enhanced_graphics,
             runner,
             infinte,
+            requests_per_seconds: 0,
+            miss: 0,
         }
     }
 
@@ -151,24 +160,26 @@ impl App<'_> {
             self.progress = 0.0;
         }
 
-        if let Some(taken) = self.runner.pop_taken() {
+        let mut runner = self.runner.borrow_mut();
+
+        if let Some(taken) = runner.pop_taken() {
             self.takens.items.pop();
             self.takens.items.insert(0, taken);
         }
 
-        if let Some(error) = self.runner.pop_error() {
+        if let Some(error) = runner.pop_error() {
             self.errors.items.pop();
             self.errors.items.insert(0, error);
         }
 
-        if let Some(log) = self.runner.pop_log() {
+        if let Some(log) = runner.pop_log() {
             self.logs.items.pop();
             self.logs.items.insert(0, log);
         }
 
-        if let Some(available) = self.runner.pop_available() {
-            // self.available.items.pop().unwrap();
-            self.available.items.insert(0, available);
+        if let Some(hunt) = runner.pop_hunt() {
+            // self.hunt.items.pop().unwrap();
+            self.hunt.items.insert(0, hunt);
         }
     }
 }
