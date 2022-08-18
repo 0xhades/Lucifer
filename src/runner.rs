@@ -34,6 +34,7 @@ pub enum AppEvent {
     Error(String),
     Miss(String),
     Log((String, String)),
+    Quit,
 }
 
 pub struct Runner {
@@ -175,6 +176,7 @@ pub fn run_app<B: Backend>(
                 AppEvent::Taken(username) => runner.push_taken(username),
                 AppEvent::Error(username) => runner.push_error(username),
                 AppEvent::Log(log) => runner.push_log(log),
+                AppEvent::Quit => app.should_quit = true,
                 AppEvent::Miss(_) => (),
             }
         }

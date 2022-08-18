@@ -23,7 +23,6 @@ enum Title {
 pub enum ProxyType {
     HTTP,
     SOCKS5,
-    SOCKS4,
     HTTPS,
 }
 
@@ -56,7 +55,6 @@ impl Config {
     ) -> Self {
         let proxy_type = match proxy_type.trim().to_lowercase().as_str() {
             "http" => ProxyType::HTTP,
-            "socks4" => ProxyType::SOCKS4,
             "socks5" => ProxyType::SOCKS5,
             "https" => ProxyType::HTTPS,
             _ => {

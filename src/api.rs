@@ -13,6 +13,43 @@ use super::useragents::USER_AGENTS;
 const DEVICE_VERSION: &str = "135.0.0.34.124";
 const BIO: &str = "";
 
+pub fn is_valid_session(session: &str) -> Option<String> {
+    let session = session.clone().to_string();
+    if session.to_lowercase().contains("%3a") {
+        let splited = session.split("%3a").collect::<Vec<&str>>();
+        if splited.len() >= 3 {
+            return Some(format!(
+                "{}%3A{}%3A{}",
+                splited.get(0)?,
+                splited.get(1)?,
+                splited.get(2)?
+            ));
+        }
+    } else if session.to_lowercase().contains("%3A") {
+        let splited = session.split("%3A").collect::<Vec<&str>>();
+        if splited.len() >= 3 {
+            return Some(format!(
+                "{}%3A{}%3A{}",
+                splited.get(0)?,
+                splited.get(1)?,
+                splited.get(2)?
+            ));
+        }
+    } else if session.to_lowercase().contains(":") {
+        let splited = session.split(":").collect::<Vec<&str>>();
+        if splited.len() >= 3 {
+            return Some(format!(
+                "{}%3A{}%3A{}",
+                splited.get(0)?,
+                splited.get(1)?,
+                splited.get(2)?
+            ));
+        }
+    }
+
+    None
+}
+
 pub struct UsernameBuilder {
     usernames: Vec<String>,
 }

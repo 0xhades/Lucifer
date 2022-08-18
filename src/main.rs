@@ -27,6 +27,7 @@ mod windows;
 
 //TODO: adding linux support
 
+mod API;
 #[cfg(target_family = "unix")]
 mod unix;
 
@@ -144,7 +145,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     Arg::with_name("type")
                         .short('s')
                         .long("type")
-                        .help("The type of the proxies [socks5, socks4, http, https].")
+                        .help("The type of the proxies [socks5, http, https].")
                         .value_name("TYPE")
                         .default_value("http")
                         .takes_value(true),
