@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::time::Duration;
 
-use super::api;
+use super::apis;
 use reqwest;
 
 pub struct Client {
@@ -33,14 +33,18 @@ impl Response {
 }
 
 impl Client {
-    pub fn new(duration: Duration, proxy: Option<reqwest::Proxy>) -> Result<Self, Box<dyn Error>> {
+    pub fn new(
+        connect_timeout: Duration,
+        request_timeout: Duration,
+        proxy: Option<reqwest::Proxy>,
+    ) -> Result<Self, Box<dyn Error>> {
         Ok(Self {
             inner: match proxy {
                 Some(proxy) => reqwest::ClientBuilder::new().proxy(proxy),
                 None => reqwest::ClientBuilder::new().no_proxy(),
             }
-            .connect_timeout(duration)
-            .timeout(duration)
+            .connect_timeout(connect_timeout)
+            .timeout(request_timeout)
             .tcp_nodelay(true)
             .pool_idle_timeout(None)
             .pool_max_idle_per_host(1)
@@ -51,11 +55,14 @@ impl Client {
         })
     }
 
-    pub async fn execute(
+    pub async fn execute<T>(
         &self,
-        request: &Box<dyn api::API>,
-        usernames: Option<&api::Username>,
-    ) -> Result<Response, Box<dyn Error>> {
+        request: &T,
+        usernames: Option<&apis::Username>,
+    ) -> Result<Response, Box<dyn Error>>
+    where
+        T: apis::API,
+    {
         let mut users: Option<&[String]> = None;
         let mut _mem_holder: Vec<String> = vec![];
         if let Some(username) = usernames {
@@ -64,8 +71,8 @@ impl Client {
         }
 
         let text = match request.method() {
-            api::Method::POST => self.inner.post(request.url()).form(&request.data(users)),
-            api::Method::GET => self.inner.get(request.url()),
+            apis::Method::POST => self.inner.post(request.url()).form(&request.data(users)),
+            apis::Method::GET => self.inner.get(request.url()),
         }
         .header("Connection", "Close")
         .headers(request.headers())

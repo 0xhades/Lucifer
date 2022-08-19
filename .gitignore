@@ -5,3 +5,5 @@ config.json
 proxy.txt
 username.txt
 session.txt
+error.log
+dbg.txt

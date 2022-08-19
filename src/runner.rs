@@ -1,3 +1,5 @@
+use crate::app::Status;
+
 use super::app::App;
 use super::checker::Checker;
 use super::ui;
@@ -12,7 +14,10 @@ use std::rc::Rc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
-use std::sync::{mpsc, Arc};
+use std::sync::{
+    mpsc::{self, TryRecvError},
+    Arc,
+};
 use std::thread;
 use std::{error::Error, time::Duration};
 use std::{
@@ -28,13 +33,13 @@ use tui::{
     Terminal,
 };
 
+#[derive(Debug)]
 pub enum AppEvent {
     Hunt(String),
     Taken(String),
     Error(String),
     Miss(String),
     Log((String, String)),
-    Quit,
 }
 
 pub struct Runner {
@@ -76,7 +81,8 @@ impl Runner {
             true,
             config.infinte(),
         );
-        run_app(&mut terminal, app, config, this, tick_rate);
+
+        let result = run_app(&mut terminal, app, config, this, tick_rate);
 
         // restore terminal
         disable_raw_mode()?;
@@ -87,6 +93,9 @@ impl Runner {
         )?;
         terminal.show_cursor()?;
 
+        if let Err(e) = result {
+            return Err(e);
+        }
         Ok(())
     }
 
@@ -124,6 +133,7 @@ pub fn run_app<B: Backend>(
     tick_rate: Duration,
 ) -> Result<(), Box<dyn Error>> {
     let (tx, rx) = mpsc::channel::<AppEvent>();
+    let mut critical = false;
 
     let shared_config = Arc::new(config);
     let should_quit = Arc::new(AtomicBool::new(false));
@@ -146,10 +156,10 @@ pub fn run_app<B: Backend>(
         shared.1,
         shared.2,
         shared.3,
-        tx,
+        tx.clone(),
         shared.4,
     );
-    let handle = thread::spawn(move || checker.run());
+    let handle = thread::spawn(move || checker.init());
 
     let mut last_tick = Instant::now();
     loop {
@@ -175,8 +185,13 @@ pub fn run_app<B: Backend>(
                 AppEvent::Hunt(username) => runner.push_hunt(username),
                 AppEvent::Taken(username) => runner.push_taken(username),
                 AppEvent::Error(username) => runner.push_error(username),
-                AppEvent::Log(log) => runner.push_log(log),
-                AppEvent::Quit => app.should_quit = true,
+                AppEvent::Log(log) => {
+                    if log.0 == Status::critical() {
+                        app.should_quit = true;
+                        critical = true;
+                    }
+                    runner.push_log(log);
+                }
                 AppEvent::Miss(_) => (),
             }
         }
@@ -213,6 +228,13 @@ pub fn run_app<B: Backend>(
 
         if !app.should_quit {
             continue;
+        }
+
+        app.on_tick();
+        terminal.draw(|f| ui::draw(f, &mut app))?;
+
+        if critical {
+            thread::sleep(Duration::from_secs(3));
         }
 
         should_quit.store(true, Ordering::Release);

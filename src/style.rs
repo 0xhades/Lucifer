@@ -3,7 +3,7 @@ use crossterm::{
     style::{Color, Print, ResetColor, SetForegroundColor},
     terminal::{self, ClearType},
 };
-use std::{fmt::Display, process::exit, time::Duration};
+use std::{fmt::Display, io::stderr, process::exit, time::Duration};
 
 use std::{
     error::Error,
@@ -25,11 +25,11 @@ pub fn PrintError<T>(
 where
     T: Display,
 {
-    PrintColorful("[", secondary)?;
-    PrintColorful("!", primary)?;
-    PrintColorful("] ", secondary)?;
+    PrintColorfulErr("[", secondary)?;
+    PrintColorfulErr("!", primary)?;
+    PrintColorfulErr("] ", secondary)?;
 
-    PrintColorful(error.to_string().as_str(), primary)?;
+    PrintColorfulErr(error.to_string().as_str(), primary)?;
     if quit {
         exit(1);
     }
@@ -45,11 +45,11 @@ pub fn PrintlnError<T>(
 where
     T: Display,
 {
-    PrintColorful("[", secondary)?;
-    PrintColorful("!", primary)?;
-    PrintColorful("] ", secondary)?;
+    PrintColorfulErr("[", secondary)?;
+    PrintColorfulErr("!", primary)?;
+    PrintColorfulErr("] ", secondary)?;
 
-    PrintColorful(
+    PrintColorfulErr(
         format!("{}\n", error.to_string().as_str()).as_str(),
         primary,
     )?;
@@ -63,15 +63,14 @@ pub fn PrintlnErrorQuit<T>(error: T, primary: Color, secondary: Color) -> !
 where
     T: Display,
 {
-    PrintColorful("[", secondary).unwrap_or_else(|_| exit(1));
-    PrintColorful("!", primary).unwrap_or_else(|_| exit(1));
-    PrintColorful("] ", secondary).unwrap_or_else(|_| exit(1));
+    PrintColorfulErr("[", secondary).unwrap_or_else(|_| exit(1));
+    PrintColorfulErr("!", primary).unwrap_or_else(|_| exit(1));
+    PrintColorfulErr("] ", secondary).unwrap_or_else(|_| exit(1));
 
-    PrintColorful(
-        format!("{}\n", error.to_string().as_str()).as_str(),
-        primary,
-    )
-    .unwrap_or_else(|_| exit(1));
+    PrintColorfulErr(format!("{}", error.to_string().as_str()).as_str(), primary)
+        .unwrap_or_else(|_| exit(1));
+
+    eprintln!();
 
     exit(1);
 }
@@ -130,6 +129,11 @@ pub fn PrintlnColorfulPlus(
 
 pub fn PrintColorful(s: &str, color: Color) -> Result<(), Box<dyn Error>> {
     execute!(stdout(), SetForegroundColor(color), Print(s), ResetColor)?;
+    Ok(())
+}
+
+pub fn PrintColorfulErr(s: &str, color: Color) -> Result<(), Box<dyn Error>> {
+    execute!(stderr(), SetForegroundColor(color), Print(s), ResetColor)?;
     Ok(())
 }
 

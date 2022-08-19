@@ -4,8 +4,10 @@ use reqwest::header::{HeaderMap, ACCEPT_LANGUAGE, AUTHORIZATION, COOKIE, USER_AG
 use serde_json;
 use std::collections::HashMap;
 use std::error::Error;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
+
+use crate::client::Client;
 
 use super::endpoints;
 use super::useragents::USER_AGENTS;
@@ -13,9 +15,53 @@ use super::useragents::USER_AGENTS;
 const DEVICE_VERSION: &str = "135.0.0.34.124";
 const BIO: &str = "";
 
+pub struct Session {
+    session_id: String,
+    unusable: bool,
+    information: DataAccount,
+    earned_username: String,
+}
+
+impl Session {
+    pub async fn new(
+        session_id: String,
+        connect_timeout: Duration,
+        request_timeout: Duration,
+    ) -> Result<Self, Box<dyn Error>> {
+        let mut information = DataAccount::new_raw(session_id.as_str());
+        information.fetch(connect_timeout, request_timeout).await?;
+
+        Ok(Self {
+            session_id: session_id.clone().to_string(),
+            unusable: false,
+            information,
+            earned_username: String::new(),
+        })
+    }
+
+    pub fn usability(&self) -> bool {
+        self.unusable
+    }
+
+    pub fn information(&self) -> &DataAccount {
+        &self.information
+    }
+
+    pub fn session_id(&self) -> &str {
+        &self.session_id
+    }
+
+    pub fn disable(&mut self, earned_username: Option<&str>) {
+        if let Some(username) = earned_username {
+            self.earned_username = username.clone().to_string();
+        }
+        self.unusable = false;
+    }
+}
+
 pub fn is_valid_session(session: &str) -> Option<String> {
     let session = session.clone().to_string();
-    if session.to_lowercase().contains("%3a") {
+    if session.contains("%3a") {
         let splited = session.split("%3a").collect::<Vec<&str>>();
         if splited.len() >= 3 {
             return Some(format!(
@@ -25,7 +71,7 @@ pub fn is_valid_session(session: &str) -> Option<String> {
                 splited.get(2)?
             ));
         }
-    } else if session.to_lowercase().contains("%3A") {
+    } else if session.contains("%3A") {
         let splited = session.split("%3A").collect::<Vec<&str>>();
         if splited.len() >= 3 {
             return Some(format!(
@@ -35,7 +81,7 @@ pub fn is_valid_session(session: &str) -> Option<String> {
                 splited.get(2)?
             ));
         }
-    } else if session.to_lowercase().contains(":") {
+    } else if session.contains(":") {
         let splited = session.split(":").collect::<Vec<&str>>();
         if splited.len() >= 3 {
             return Some(format!(
@@ -201,74 +247,66 @@ pub trait API {
 
 pub type SessionID = String;
 
-pub enum APIs {
-    /// **Input**: `1` *username*,
-    /// **Output**: `1` *username*
-    Create,
-
-    /// **Input**: `1` *username*,
-    /// **Output**: `1` *username*
-    CreateBusinessValidated,
-
-    /// **Input**: `1` *username*,
-    /// **Output**: `1` *username*  
-    CreateValidated,
-
-    /// **Input**: `1` *username*,
-    /// **Output**: `1` *username*
-    CreateBusiness,
-
-    /// **Input**: `3` *username*,
-    /// **Output**: `multi` *username*
-    WebCreateAjax,
-
-    /// **Input**: `1` *username*,
-    /// **Output**: `multi` *username*
-    CheckUsername,
-    /// **Input**: `3` *username*,
-    /// **Output**: `multi` *username*
-    UsernameSuggestions,
-
-    /// **Input**: `1` *username*,
-    /// **Output**: `0` *username*
-    EditProfile(DataAccount),
-
-    /// **Input**: `1` *username*,
-    /// **Output**: `0` *username*
-    BloksUsernameChange(DataAccount),
-
-    /// **Input**: `0` *username*,
-    /// **Output**: `0` *username*
-    CurrentUser(SessionID),
-}
-
-impl APIs {
-    pub fn new(self) -> Box<dyn API> {
-        match self {
-            APIs::Create => Box::new(Create {}),
-            APIs::CreateBusinessValidated => Box::new(CreateBusinessValidated {}),
-            APIs::CreateBusiness => Box::new(CreateBusiness {}),
-            APIs::CreateValidated => Box::new(CreateValidated {}),
-            APIs::WebCreateAjax => Box::new(WebCreateAjax {}),
-            APIs::CheckUsername => Box::new(CheckUsername {}),
-            APIs::UsernameSuggestions => Box::new(UsernameSuggestions {}),
-            APIs::EditProfile(data_account) => Box::new(EditProfile(data_account)),
-            APIs::BloksUsernameChange(data_account) => Box::new(BloksUsernameChange(data_account)),
-            APIs::CurrentUser(session_id) => Box::new(CurrentUser(session_id)),
-        }
+pub struct Create;
+impl Create {
+    pub fn new() -> Self {
+        Self {}
     }
 }
-
-pub struct Create;
 pub struct CreateBusinessValidated;
+impl CreateBusinessValidated {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
 pub struct CreateValidated;
+impl CreateValidated {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
 pub struct CreateBusiness;
+impl CreateBusiness {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
 pub struct WebCreateAjax;
+impl WebCreateAjax {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
 pub struct CheckUsername;
+impl CheckUsername {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
 pub struct UsernameSuggestions;
-pub struct CurrentUser(SessionID);
-pub struct EditProfile(DataAccount);
-pub struct BloksUsernameChange(DataAccount);
+impl UsernameSuggestions {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+pub struct CurrentUser(pub SessionID);
+impl CurrentUser {
+    pub fn new(session_id: SessionID) -> Self {
+        Self(session_id)
+    }
+}
+pub struct EditProfile(pub DataAccount);
+impl EditProfile {
+    pub fn new(data_account: DataAccount) -> Self {
+        Self(data_account)
+    }
+}
+pub struct BloksUsernameChange(pub DataAccount);
+impl BloksUsernameChange {
+    pub fn new(data_account: DataAccount) -> Self {
+        Self(data_account)
+    }
+}
 
 impl API for Create {
     fn url(&self) -> &str {
@@ -794,6 +832,43 @@ impl DataAccount {
             username: username.to_string(),
         }
     }
+
+    pub fn new_raw(session_id: &str) -> Self {
+        Self {
+            session_id: session_id.clone().to_string(),
+            email: String::new(),
+            phone: String::new(),
+            fullname: String::new(),
+            fbid: String::new(),
+            uid: String::new(),
+            username: String::new(),
+        }
+    }
+
+    pub async fn fetch(
+        &mut self,
+        connect_timeout: Duration,
+        request_timeout: Duration,
+    ) -> Result<(), Box<dyn Error>> {
+        let client = Client::new(connect_timeout, request_timeout, None)?;
+        let get_profile = CurrentUser::new(self.session_id.clone());
+
+        let resp = client.execute(&get_profile, None).await?;
+        let account = match DataAccount::parse(resp.raw(), self.session_id.as_str()) {
+            Some(data) => data,
+            None => return Err("Couldn't parse the account informations".into()),
+        };
+
+        self.email = account.email;
+        self.fbid = account.fbid;
+        self.phone = account.phone;
+        self.uid = account.uid;
+        self.username = account.username;
+        self.fullname = account.fullname;
+
+        Ok(())
+    }
+
     pub fn parse(raw: &str, session_id: &str) -> Option<Self> {
         let resp: serde_json::Value = match serde_json::from_str(raw) {
             Ok(t) => t,

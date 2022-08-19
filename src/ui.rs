@@ -125,9 +125,9 @@ where
         .logs
         .items
         .iter()
-        .map(|(evt, level)| {
+        .map(|(level, evt)| {
             let s = match level.as_str() {
-                "SUCCESS" => info_style, // success_style,
+                "SUCCESS" => success_style,
                 "ERROR" => error_style,
                 "CRITICAL" => critical_style,
                 "WARNING" => warning_style,

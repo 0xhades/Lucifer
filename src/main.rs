@@ -8,7 +8,7 @@
     non_camel_case_types,
     unused_assignments
 )]
-mod api;
+mod apis;
 mod app;
 mod checker;
 mod client;
@@ -27,7 +27,6 @@ mod windows;
 
 //TODO: adding linux support
 
-mod API;
 #[cfg(target_family = "unix")]
 mod unix;
 
@@ -63,7 +62,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
-        .worker_threads(5)
         .build()?;
 
     PrintlnColorful(titles::LARRY3D, Color::Red)?;
@@ -382,18 +380,19 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let runner = Runner::new(config, {
         if changed_fd.0 {
-            vec![(changed_fd.1, Status::success())]
+            vec![(Status::success(), changed_fd.1)]
         } else {
-            vec![("Couldn't change fds".to_string(), Status::error())]
+            vec![(Status::error(), "Couldn't change fds".to_string())]
         }
     });
-    rt.block_on(rt.spawn_blocking(move || {
-        if let Err(e) = runner.run() {
-            PrintlnErrorQuit(format!("An error occurred: {}", e), Color::Red, Color::Cyan);
-        }
-        PrintlnColorfulPlus("Thanks for using lucifer!", Color::Cyan, Color::Red).unwrap();
-    }))
-    .unwrap_or_else(|_| ());
+
+    drop(rt);
+
+    PrintlnColorfulPlus("Thanks for using lucifer!", Color::Cyan, Color::Red).unwrap();
+
+    if let Err(e) = runner.run() {
+        PrintlnErrorQuit(format!("An error occurred: {}", e), Color::Red, Color::Cyan);
+    }
 
     Ok(())
 }

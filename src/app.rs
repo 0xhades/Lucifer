@@ -164,17 +164,23 @@ impl App {
         let mut runner = self.runner.borrow_mut();
 
         if let Some(taken) = runner.pop_taken() {
-            self.takens.items.pop();
+            if self.takens.items.len() > 5 {
+                self.takens.items.pop();
+            }
             self.takens.items.insert(0, taken);
         }
 
         if let Some(error) = runner.pop_error() {
-            self.errors.items.pop();
+            if self.errors.items.len() > 5 {
+                self.errors.items.pop();
+            }
             self.errors.items.insert(0, error);
         }
 
         if let Some(log) = runner.pop_log() {
-            self.logs.items.pop();
+            if self.logs.items.len() > 5 {
+                self.logs.items.pop();
+            }
             self.logs.items.insert(0, log);
         }
 

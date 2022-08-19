@@ -1,4 +1,4 @@
-use super::api::is_valid_session;
+use super::apis::is_valid_session;
 use super::style::PrintlnError;
 use crossterm::style::Color;
 use std::error::Error;
@@ -35,7 +35,11 @@ pub fn is_valid_proxy(proxy: &str) -> Option<String> {
     if proxy.contains(":") {
         let splited = proxy.split(":").collect::<Vec<&str>>();
         if splited.len() >= 2 {
-            return Some(format!("{}:{}", splited.get(0)?, splited.get(1)?));
+            return Some(format!(
+                "{}:{}",
+                splited.get(0)?.trim(),
+                splited.get(1)?.trim()
+            ));
         }
     }
 
@@ -50,7 +54,7 @@ pub fn load_usernames(path: &str) -> Result<Vec<String>, Box<dyn Error>> {
         .lines()
         .into_iter()
         .filter(|s| s.len() != 0)
-        .map(|s| s.to_string())
+        .map(|s| s.trim().to_string())
         .collect::<Vec<String>>();
 
     Ok(lines)
@@ -80,7 +84,7 @@ pub fn load_sessions(path: &str) -> Result<Vec<String>, Box<dyn Error>> {
         .into_iter()
         .map(|s| is_valid_session(s))
         .filter(|s| s.is_some())
-        .map(|s| s.unwrap())
+        .map(|s| s.unwrap().trim().to_string())
         .collect::<Vec<String>>();
 
     Ok(lines)
