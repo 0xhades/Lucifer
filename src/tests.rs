@@ -5,10 +5,10 @@ mod test {
 
     use crate::apis::{
         BloksUsernameChange, CheckUsername, Create, CreateBusinessValidated, CurrentUser,
-        DataAccount, UsernameBuilder, UsernameSuggestions, WebCreateAjax,
+        DataAccount, Session, UsernameBuilder, UsernameSuggestions, WebCreateAjax,
     };
-    use crate::checker::split_list;
     use crate::client::Client;
+    use crate::utils::split_list;
 
     use tokio::{
         fs::OpenOptions,
@@ -22,11 +22,11 @@ mod test {
     fn split_list_to_parts() {
         println!();
 
-        let list = (1..=10).map(|i| i.to_string()).collect::<Vec<String>>();
-        let list = split_list(&list, 16, false).unwrap();
+        let list = (1..=100).map(|i| i.to_string()).collect::<Vec<String>>();
+        let list = split_list(list, 16, false).unwrap();
 
-        for (i, mut it) in list.0.into_iter().enumerate() {
-            println!("{}: {:?}", i, it.collect::<Vec<&String>>());
+        for (i, it) in list.0.into_iter().enumerate() {
+            println!("{}: {:?}", i, it.into_iter().collect::<Vec<String>>());
         }
 
         if list.2 {
@@ -108,14 +108,13 @@ mod test {
     #[tokio::test]
     async fn change_username_async() {
         let client = Client::new(TIMEOUT, TIMEOUT, None).unwrap();
-        let get_profile = CurrentUser(String::from(SESSION_ID));
 
-        let resp = client.execute(&get_profile, None).await.unwrap();
-        let account = DataAccount::parse(resp.raw(), SESSION_ID).unwrap();
-        println!("{}", resp.raw());
+        let account = Session::new(SESSION_ID.to_string(), TIMEOUT, TIMEOUT)
+            .await
+            .unwrap();
         println!("{:?}", account);
 
-        let bloksUsernameChange = BloksUsernameChange(account);
+        let bloksUsernameChange = BloksUsernameChange::new(account.information().clone());
         let username = UsernameBuilder::new().single("0xhadesssapfpes").build();
         let resp = client
             .execute(&bloksUsernameChange, Some(&username))

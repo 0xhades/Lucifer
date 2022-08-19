@@ -15,6 +15,52 @@ use super::useragents::USER_AGENTS;
 const DEVICE_VERSION: &str = "135.0.0.34.124";
 const BIO: &str = "";
 
+pub struct EarnRequest {
+    bloks_username_change: BloksUsernameChange,
+    edit_profile: EditProfile,
+    session: Session,
+}
+
+impl EarnRequest {
+    pub async fn new(
+        session: String,
+        connect_timeout: Duration,
+        request_timeout: Duration,
+    ) -> Result<Self, Box<dyn Error>> {
+        let session = Session::new(session, connect_timeout, request_timeout).await?;
+
+        let edit_profile = EditProfile::new(session.information.clone());
+        let bloks_username_change = BloksUsernameChange::new(session.information.clone());
+
+        Ok(Self {
+            bloks_username_change,
+            edit_profile,
+            session,
+        })
+    }
+
+    pub fn edit_profile(&self) -> &EditProfile {
+        &self.edit_profile
+    }
+
+    pub fn bloks_username_change(&self) -> &BloksUsernameChange {
+        &self.bloks_username_change
+    }
+
+    pub fn session(&self) -> &Session {
+        &self.session
+    }
+
+    pub fn usability(&self) -> bool {
+        self.session.usability()
+    }
+
+    pub fn disable(&mut self, earned_username: Option<&str>) {
+        self.session.disable(earned_username)
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct Session {
     session_id: String,
     unusable: bool,
@@ -215,7 +261,7 @@ fn enc_password() -> Result<String, Box<dyn Error>> {
     Ok(format!("#PWD_INSTAGRAM_BROWSER:0:{}:fpes", timestamp))
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DataAccount {
     session_id: SessionID,
     email: String,
@@ -295,16 +341,20 @@ impl CurrentUser {
         Self(session_id)
     }
 }
-pub struct EditProfile(pub DataAccount);
+
+#[derive(Clone)]
+pub struct EditProfile(DataAccount);
 impl EditProfile {
-    pub fn new(data_account: DataAccount) -> Self {
-        Self(data_account)
+    pub fn new(data: DataAccount) -> Self {
+        Self(data)
     }
 }
-pub struct BloksUsernameChange(pub DataAccount);
+
+#[derive(Clone)]
+pub struct BloksUsernameChange(DataAccount);
 impl BloksUsernameChange {
-    pub fn new(data_account: DataAccount) -> Self {
-        Self(data_account)
+    pub fn new(data: DataAccount) -> Self {
+        Self(data)
     }
 }
 

@@ -1,30 +1,38 @@
 use crate::{
-    apis::Session,
+    apis::{
+        BloksUsernameChange, CheckUsername, Create, CreateBusiness, CreateBusinessValidated,
+        CreateValidated, EarnRequest, EditProfile, Session, UsernameSuggestions, WebCreateAjax,
+    },
     app::Status,
+    client::Client,
     config::{Config, ProxyType},
     runner::AppEvent,
-    utils::{load_proxies, load_sessions, load_usernames, save_log},
+    utils::{load_proxies, load_sessions, load_usernames, save_log, split_list},
 };
-use futures::future;
+use futures::{future, stream::FuturesUnordered};
 use std::{
+    error::Error,
     iter::StepBy,
     slice::Iter,
     sync::{
-        atomic::{AtomicBool, AtomicUsize},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         mpsc::Sender,
         Arc,
     },
+    thread::{self, JoinHandle},
     time::Duration,
 };
+use tokio::sync::Semaphore;
 
 type counter = Arc<AtomicUsize>;
 const LOGS_PATH: &str = "error.log";
 
 pub struct Checker {
-    config: Arc<Config>,
+    config: Config,
     TakenTotal: counter,
     ErrorTotal: counter,
     MissTotal: counter,
+    HuntTotal: counter,
     RS: counter,
     Transmitter: Sender<AppEvent>,
     should_quit: Arc<AtomicBool>,
@@ -32,7 +40,7 @@ pub struct Checker {
 
 impl Checker {
     pub fn new(
-        config: Arc<Config>,
+        config: Config,
         TakenTotal: counter,
         ErrorTotal: counter,
         MissTotal: counter,
@@ -48,20 +56,9 @@ impl Checker {
             RS,
             Transmitter,
             should_quit,
+            HuntTotal: Arc::new(AtomicUsize::new(0)),
         }
     }
-
-    /*
-    TODO:
-        - think of a thread system []
-        - implement the thread system []
-        - use all of the states []
-        - figure how to use progress (app.rs) []
-        - figure out how to use SOCKS5, HTTP, HTTPS proxies []
-        - importing Proxies, Usernames, SessionIDs []
-        - how to use the APIs correctly []
-        - think of error handling and retrying methods (spam, block...) []
-    */
 
     pub fn init(self) -> Option<String> {
         let rt = match tokio::runtime::Builder::new_multi_thread()
@@ -76,15 +73,30 @@ impl Checker {
     }
 
     pub async fn run(self) -> Option<String> {
-        let MAX_WORKERS: usize = self.config.threads().clone() as usize;
-        let LIMIT: usize = self.config.limit_per_thread().clone() as usize;
-        let CONNECT_TIMEOUT: Duration = self.config.timeout_connect_proxy().clone();
-        let REQUEST_TIMEOUT: Duration = self.config.timeout_request().clone();
+        let MAX_WORKERS: usize = match self.config.threads().clone() as usize {
+            0 => 10,
+            t => t,
+        };
+        let LIMIT: usize = match self.config.limit_per_thread().clone() as usize {
+            0 => 50,
+            t => t,
+        };
+
+        let CONNECT_TIMEOUT: Duration = match self.config.timeout_connect_proxy().clone() {
+            t if t.as_secs() == 0 => Duration::from_secs(10),
+            t => t,
+        };
+        let REQUEST_TIMEOUT: Duration = match self.config.timeout_request().clone() {
+            t if t.as_secs() == 0 => Duration::from_secs(10),
+            t => t,
+        };
 
         let PROXY_TYPE: ProxyType = self.config.proxy_type();
         let PROXY_PATH: String = self.config.proxy_path();
         let USERNAME_PATH: String = self.config.username_path();
         let SESSIONID_PATH: String = self.config.session_path();
+
+        const DONT_WRAP: bool = false;
 
         let proxies = match load_proxies(&PROXY_PATH) {
             Ok(list) => list,
@@ -159,6 +171,24 @@ impl Checker {
             }
         };
 
+        self.Transmitter.send(AppEvent::Log((
+            String::new(),
+            "Checking sessions".to_string(),
+        )));
+
+        let sessions = future::join_all(
+            FuturesUnordered::from_iter(sessions.into_iter())
+                .into_iter()
+                .map(|s| EarnRequest::new(s, CONNECT_TIMEOUT, REQUEST_TIMEOUT)),
+        )
+        .await;
+
+        let sessions = sessions
+            .into_iter()
+            .filter(|r| r.is_ok())
+            .map(|s| s.unwrap())
+            .collect::<Vec<EarnRequest>>();
+
         if sessions.len() != 0 {
             self.Transmitter.send(AppEvent::Log((
                 Status::success(),
@@ -172,122 +202,184 @@ impl Checker {
             return Some("SessionIDs are empty, or invalid".to_string());
         }
 
-        self.Transmitter.send(AppEvent::Log((
-            String::new(),
-            "Checking sessions".to_string(),
-        )));
-
-        let sessions = match future::try_join_all(
-            sessions
-                .into_iter()
-                .map(|s| Session::new(s, CONNECT_TIMEOUT, REQUEST_TIMEOUT)),
-        )
-        .await
-        {
-            Ok(t) => t,
-            Err(e) => {
+        let (lists, extra_threads, use_random) = match split_list(list, MAX_WORKERS, DONT_WRAP) {
+            Some(t) => t,
+            None => {
                 self.Transmitter.send(AppEvent::Log((
                     Status::critical(),
-                    "Can't check sessions".to_string(),
+                    "Can't split list".to_string(),
                 )));
-                save_log(LOGS_PATH, &e.to_string());
-                return Some(format!(
-                    "An error occurred while checking all the session IDs: {}",
-                    e
-                ));
+                return Some("An error occurred while spliting the usernames".to_string());
             }
         };
 
-        // 1. split usernames
-        // 2. random proxies?
-        // 3. sessions:
+        let create = Create::new();
+        let create_business_validated = CreateBusinessValidated::new();
+        let create_business = CreateBusiness::new();
+        let create_validated = CreateValidated::new();
+
+        let web_create_ajax = WebCreateAjax::new();
+        let check_username = CheckUsername::new();
+        let username_suggestions = UsernameSuggestions::new();
+
+        let calculate_values = (
+            Arc::clone(&self.RS),
+            Arc::clone(&self.HuntTotal),
+            Arc::clone(&self.MissTotal),
+            Arc::clone(&self.TakenTotal),
+            Arc::clone(&self.should_quit),
+        );
+        let mut handles: Vec<JoinHandle<()>> = vec![thread::spawn(move || {
+            // calculate requests per seconds
+            while !calculate_values.4.load(Ordering::Relaxed) {
+                let i = ({ calculate_values.2.load(Ordering::Relaxed).clone() }
+                    + { calculate_values.1.load(Ordering::Relaxed).clone() }
+                    + { calculate_values.3.load(Ordering::Relaxed).clone() });
+                thread::sleep(Duration::from_secs(1));
+                let f = ({ calculate_values.2.load(Ordering::Relaxed).clone() }
+                    + { calculate_values.1.load(Ordering::Relaxed).clone() }
+                    + { calculate_values.3.load(Ordering::Relaxed).clone() });
+                calculate_values.0.store(f - i, Ordering::Release);
+            }
+        })];
+
+        for list in lists {
+            let thread_values = (
+                Arc::clone(&self.RS),
+                Arc::clone(&self.HuntTotal),
+                Arc::clone(&self.MissTotal),
+                Arc::clone(&self.TakenTotal),
+                Arc::clone(&self.should_quit),
+                Arc::clone(&self.ErrorTotal),
+                self.Transmitter.clone(),
+            );
+            handles.push(thread::spawn(move || {
+                worker(
+                    list,
+                    LIMIT,
+                    thread_values.1,
+                    thread_values.5,
+                    thread_values.2,
+                    thread_values.3,
+                    thread_values.4,
+                    thread_values.6.clone(),
+                )
+            }));
+        }
+
+        if use_random {
+            for _ in 0..extra_threads {
+                let thread_values = (
+                    Arc::clone(&self.RS),
+                    Arc::clone(&self.HuntTotal),
+                    Arc::clone(&self.MissTotal),
+                    Arc::clone(&self.TakenTotal),
+                    Arc::clone(&self.should_quit),
+                    Arc::clone(&self.ErrorTotal),
+                    self.Transmitter.clone(),
+                );
+                handles.push(thread::spawn(move || {
+                    worker_random(
+                        LIMIT,
+                        thread_values.1,
+                        thread_values.5,
+                        thread_values.2,
+                        thread_values.3,
+                        thread_values.4,
+                        thread_values.6.clone(),
+                    )
+                }));
+            }
+        }
+
+        for handle in handles {
+            handle.join().unwrap();
+        }
+
+        // TODO:
+        // 1. split usernames [✔]
+        // 2. random request? think of requests switch system
+        // 3. random proxies?
+        // 4. sessions:
         //      are randomly picked objects, if one is used, it won't be used again, if no session left -> end program
-        // 4.
+
+        /*
+        TODO:
+            - think of a thread system []
+            - implement the thread system []
+            - use all of the states []
+            - figure how to use progress (app.rs) []
+            - figure out how to use SOCKS5, HTTP, HTTPS proxies []
+            - importing Proxies, Usernames, SessionIDs []
+            - how to use the APIs correctly []
+            - think of error handling and retrying methods (spam, block...) []
+        */
 
         None
     }
 }
 
-/// skip the iterator to (n).
-/// Warning: Please don't use it with an iterator that used `.next()`,
-/// because cannot get the current index of an iterator.
-fn advance_by<T>(mut iterator: T, n: usize, length: usize) -> Option<T>
-where
-    T: Iterator,
-{
-    if n >= length {
-        return None;
-    }
+fn worker(
+    list: Vec<String>,
+    limit: usize,
+    huntTotal: Arc<AtomicUsize>,
+    errorTotal: Arc<AtomicUsize>,
+    missTotal: Arc<AtomicUsize>,
+    takenTotal: Arc<AtomicUsize>,
+    should_quit: Arc<AtomicBool>,
+    transmitter: Sender<AppEvent>,
+) {
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
 
-    for i in 0..n {
-        if let None = iterator.next() {
-            return None;
+    rt.block_on(async move {
+        let semaphore = Arc::new(Semaphore::new(limit));
+
+        loop {
+            let permits = Arc::clone(&semaphore);
+            let _permit = permits.acquire_owned().await.unwrap();
+
+            tokio::spawn(async move {
+                drop(_permit);
+            });
+
+            if should_quit.load(Ordering::Relaxed) {
+                break;
+            }
         }
-    }
-
-    Some(iterator)
+    });
 }
 
-/// `dont_wrap:`
-/// dont repeat values (wrap) **if threads count is more than the list size** and
-/// stick with the full list.
-pub fn split_list(
-    list: &Vec<String>,
-    parts: i32,
-    mut dont_wrap: bool,
-) -> Option<(Vec<StepBy<Iter<String>>>, i32, bool)> {
-    /*
-        This algortim gonna make the RAM explode if you'll use it with a very big list
-        like 15Gb. So find another way when dealing with big lists...
-        This is only for small lists...
+fn worker_random(
+    limit: usize,
+    huntTotal: Arc<AtomicUsize>,
+    errorTotal: Arc<AtomicUsize>,
+    missTotal: Arc<AtomicUsize>,
+    takenTotal: Arc<AtomicUsize>,
+    should_quit: Arc<AtomicBool>,
+    transmitter: Sender<AppEvent>,
+) {
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
 
-        This is one of the ways to make mutexless (for the big list) multi-threading..
-        Find onther way in the future.
+    rt.block_on(async move {
+        let semaphore = Arc::new(Semaphore::new(limit));
 
-        There are cases that this algortim might broke and need handling:
+        loop {
+            let permits = Arc::clone(&semaphore);
+            let _permit = permits.acquire_owned().await.unwrap();
 
-        - Workers > list size
-            ✔ The extra threads going to process random items from
-            the list as long as the extra threads dosen't excced or equals the
-            orginial orgnized workers. if excced or equals, warp it again.
-            ✔ warp it around, make the extra threads make back around
-            and start from the beginning.
-            - or run the alogritm again on those extra workers.
+            tokio::spawn(async move {
+                drop(_permit);
+            });
 
-        ✔ Workers are zero -> stop the program.
-        ✔ workers == list size -> each item has its own thread.
-        ✔ workers are close to the list size -> the algortim takes care of it.
-        ✔ check if the list is empty first before everything.
-    */
-
-    let LIST_SIZE = list.len() as i32;
-    let PARTS = parts;
-
-    let extra_workers_count: i32 = PARTS - LIST_SIZE;
-
-    // force check
-    if extra_workers_count >= PARTS {
-        dont_wrap = false;
-    }
-
-    let mut emergency_n: i32 = -1;
-    let worker_iters: Vec<StepBy<Iter<String>>> = (0..PARTS)
-        .map(|i| advance_by(list.iter(), i as usize, LIST_SIZE as usize))
-        .filter(|i| i.is_some() || !dont_wrap)
-        .map(|i| {
-            i.unwrap_or_else(|| {
-                // handling extra workers
-                emergency_n += 1;
-                advance_by(list.iter(), emergency_n as usize, LIST_SIZE as usize).unwrap_or_else(
-                    || {
-                        emergency_n = 0;
-                        advance_by(list.iter(), emergency_n as usize, LIST_SIZE as usize).unwrap()
-                    },
-                )
-            })
-            .step_by(PARTS as usize)
-        })
-        .collect();
-
-    Some((worker_iters, extra_workers_count, dont_wrap))
+            if should_quit.load(Ordering::Relaxed) {
+                break;
+            }
+        }
+    });
 }

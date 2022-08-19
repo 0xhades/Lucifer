@@ -135,7 +135,6 @@ pub fn run_app<B: Backend>(
     let (tx, rx) = mpsc::channel::<AppEvent>();
     let mut critical = false;
 
-    let shared_config = Arc::new(config);
     let should_quit = Arc::new(AtomicBool::new(false));
     let TakenTotal = Arc::new(AtomicUsize::new(0));
     let ErrorTotal = Arc::new(AtomicUsize::new(0));
@@ -151,7 +150,7 @@ pub fn run_app<B: Backend>(
     );
 
     let checker = Checker::new(
-        shared_config,
+        config,
         shared.0,
         shared.1,
         shared.2,
