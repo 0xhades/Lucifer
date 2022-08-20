@@ -34,7 +34,6 @@ pub struct App {
     pub logs: StatefulList<(String, String)>,
     pub tabs: TabsState,
     pub enhanced_graphics: bool,
-    pub infinte: bool,
     pub runner: Rc<RefCell<Runner>>,
 }
 
@@ -110,12 +109,7 @@ impl TabsState {
 }
 
 impl App {
-    pub fn new(
-        title: String,
-        runner: Rc<RefCell<Runner>>,
-        enhanced_graphics: bool,
-        infinte: bool,
-    ) -> App {
+    pub fn new(title: String, runner: Rc<RefCell<Runner>>, enhanced_graphics: bool) -> App {
         App {
             title,
             should_quit: false,
@@ -129,7 +123,6 @@ impl App {
             tabs: TabsState::new(vec!["Main".to_string(), "About".to_string()]),
             enhanced_graphics,
             runner,
-            infinte,
             requests_per_seconds: 0,
             miss: 0,
         }
@@ -154,14 +147,18 @@ impl App {
     }
 
     pub fn on_tick(&mut self) {
-        //TODO: figure how to use progress
-        // Update progress
-        self.progress += 0.001;
+        let mut runner = self.runner.borrow_mut();
+
+        let total = (self.hunt.items.len()) as f64;
+
+        let size = runner.list_size() as f64;
+        if size != 0.0 {
+            self.progress += total / size;
+        }
+
         if self.progress > 1.0 {
             self.progress = 0.0;
         }
-
-        let mut runner = self.runner.borrow_mut();
 
         if let Some(taken) = runner.pop_taken() {
             if self.takens.items.len() > 5 {

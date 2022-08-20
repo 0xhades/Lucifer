@@ -100,6 +100,14 @@ pub fn save_log(path: &str, log: &str) {
     file.write_all(format!("{}\n", log).as_bytes()).ok();
 }
 
+pub fn save_hunt(path: &str, log: &str) {
+    let mut file = match OpenOptions::new().write(true).open(path) {
+        Ok(f) => f,
+        Err(_) => return,
+    };
+    file.write_all(format!("{}\n", log).as_bytes()).ok();
+}
+
 /// skip the iterator to (n).
 /// Warning: Please don't use it with an iterator that used `.next()`,
 /// because cannot get the current index of an iterator.

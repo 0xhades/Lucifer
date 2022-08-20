@@ -1,5 +1,10 @@
 use base64::encode as base64encode;
-use rand::{distributions::Alphanumeric, rngs::ThreadRng, seq::SliceRandom, thread_rng, Rng};
+use rand::{
+    distributions::{Alphanumeric, Distribution, Standard},
+    rngs::ThreadRng,
+    seq::SliceRandom,
+    thread_rng, Rng,
+};
 use reqwest::header::{HeaderMap, ACCEPT_LANGUAGE, AUTHORIZATION, COOKIE, USER_AGENT};
 use serde_json;
 use std::collections::HashMap;
@@ -86,7 +91,7 @@ impl Session {
     }
 
     pub fn usability(&self) -> bool {
-        self.unusable
+        !self.unusable
     }
 
     pub fn information(&self) -> &DataAccount {
@@ -101,7 +106,7 @@ impl Session {
         if let Some(username) = earned_username {
             self.earned_username = username.clone().to_string();
         }
-        self.unusable = false;
+        self.unusable = true;
     }
 }
 
@@ -292,6 +297,30 @@ pub trait API {
 }
 
 pub type SessionID = String;
+
+pub enum APIs {
+    Create(Create),
+    CreateBusinessValidated(CreateBusinessValidated),
+    CreateValidated(CreateValidated),
+    CreateBusiness(CreateBusiness),
+    WebCreateAjax(WebCreateAjax),
+    CheckUsername(CheckUsername),
+    UsernameSuggestions(UsernameSuggestions),
+}
+
+impl Distribution<APIs> for Standard {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> APIs {
+        match rng.gen_range(0..=6) {
+            0 => APIs::Create(Create::new()),
+            1 => APIs::CreateBusiness(CreateBusiness::new()),
+            2 => APIs::CreateBusinessValidated(CreateBusinessValidated::new()),
+            3 => APIs::CreateValidated(CreateValidated::new()),
+            4 => APIs::CheckUsername(CheckUsername::new()),
+            5 => APIs::WebCreateAjax(WebCreateAjax::new()),
+            _ => APIs::UsernameSuggestions(UsernameSuggestions::new()),
+        }
+    }
+}
 
 pub struct Create;
 impl Create {

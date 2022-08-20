@@ -219,7 +219,7 @@ where
 
     let label = format!("{:.2}%", app.progress * 100.0);
     let gauge = Gauge::default()
-        .block(Block::default().title("Progress:"))
+        .block(Block::default().title("Used Sessions:"))
         .gauge_style(
             Style::default()
                 .fg(Color::Magenta)

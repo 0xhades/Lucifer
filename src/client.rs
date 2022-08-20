@@ -23,6 +23,10 @@ impl Response {
         }
     }
 
+    pub fn status(&self) -> bool {
+        self.status
+    }
+
     pub fn raw(&self) -> &str {
         &self.raw
     }
@@ -36,11 +40,11 @@ impl Client {
     pub fn new(
         connect_timeout: Duration,
         request_timeout: Duration,
-        proxy: Option<reqwest::Proxy>,
+        proxy: Option<&reqwest::Proxy>,
     ) -> Result<Self, Box<dyn Error>> {
         Ok(Self {
             inner: match proxy {
-                Some(proxy) => reqwest::ClientBuilder::new().proxy(proxy),
+                Some(proxy) => reqwest::ClientBuilder::new().proxy(proxy.clone()),
                 None => reqwest::ClientBuilder::new().no_proxy(),
             }
             .connect_timeout(connect_timeout)
@@ -59,7 +63,7 @@ impl Client {
         &self,
         request: &T,
         usernames: Option<&apis::Username>,
-    ) -> Result<Response, Box<dyn Error>>
+    ) -> Result<Response, String>
     where
         T: apis::API,
     {
@@ -70,16 +74,24 @@ impl Client {
             users = Some(_mem_holder.as_slice());
         }
 
-        let text = match request.method() {
+        let text = match match match request.method() {
             apis::Method::POST => self.inner.post(request.url()).form(&request.data(users)),
             apis::Method::GET => self.inner.get(request.url()),
         }
         .header("Connection", "Close")
         .headers(request.headers())
         .send()
-        .await?
+        .await
+        {
+            Ok(it) => it,
+            Err(err) => return Err(err.to_string()),
+        }
         .text()
-        .await?;
+        .await
+        {
+            Ok(it) => it,
+            Err(err) => return Err(err.to_string()),
+        };
 
         let (status, result_usernames) = request.is_ok(&text, users);
         Ok(Response::new(status, result_usernames, text))

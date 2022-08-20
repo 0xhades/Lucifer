@@ -86,11 +86,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                         .value_name("NUMBER")
                         .default_value("15")
                         .takes_value(true),
-                    Arg::with_name("once")
-                        .short('o')
-                        .long("once")
-                        .help("Add this argument to run through the list once and not infinitely.")
-                        .required(false),
                     Arg::with_name("limit")
                         .short('l')
                         .long("limit")
@@ -185,7 +180,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut proxies_path = "$";
     let mut username_path = "$";
     let mut sessions_path = "$";
-    let mut endless = true;
 
     let mut user_input_config = false;
     let mut default_config_path = false;
@@ -232,8 +226,6 @@ fn main() -> Result<(), Box<dyn Error>> {
             sessions_path = sub_matches.get_one::<String>("session").expect("required");
 
             proxies_type = sub_matches.get_one::<String>("type").expect("required");
-
-            endless = !sub_matches.is_present("once");
         }
         Some(("load", sub_matches)) => {
             if sub_matches.is_present("path") {
@@ -312,7 +304,6 @@ fn main() -> Result<(), Box<dyn Error>> {
             connect_timeout,
             username_path,
             sessions_path,
-            endless,
         );
 
         if let Err(e) = rt.block_on(save_config(&config)) {

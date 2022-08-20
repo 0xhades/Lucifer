@@ -40,6 +40,7 @@ pub enum AppEvent {
     Error(String),
     Miss(String),
     Log((String, String)),
+    List(usize),
 }
 
 pub struct Runner {
@@ -48,6 +49,7 @@ pub struct Runner {
     taken: Vec<String>,
     errors: Vec<String>,
     log: Vec<(String, String)>,
+    list_size: usize,
 }
 
 impl Runner {
@@ -58,6 +60,7 @@ impl Runner {
             taken: Vec::new(),
             errors: Vec::new(),
             log: previous_logs,
+            list_size: 0,
         }
     }
 
@@ -75,12 +78,7 @@ impl Runner {
         let this = Rc::new(RefCell::new(self));
         // create app and run it
         let tick_rate = Duration::from_millis(250);
-        let app = App::new(
-            "Lucifer".to_string(),
-            Rc::clone(&this),
-            true,
-            config.infinte(),
-        );
+        let app = App::new("Lucifer".to_string(), Rc::clone(&this), true);
 
         let result = run_app(&mut terminal, app, config, this, tick_rate);
 
@@ -122,6 +120,12 @@ impl Runner {
     }
     pub fn push_error(&mut self, error: String) {
         self.errors.push(error);
+    }
+    pub fn init_list_size(&mut self, size: usize) {
+        self.list_size = size;
+    }
+    pub fn list_size(&self) -> usize {
+        self.list_size
     }
 }
 
@@ -184,6 +188,7 @@ pub fn run_app<B: Backend>(
                 AppEvent::Hunt(username) => runner.push_hunt(username),
                 AppEvent::Taken(username) => runner.push_taken(username),
                 AppEvent::Error(username) => runner.push_error(username),
+                AppEvent::List(size) => runner.init_list_size(size),
                 AppEvent::Log(log) => {
                     if log.0 == Status::critical() {
                         app.should_quit = true;

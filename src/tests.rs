@@ -34,41 +34,6 @@ mod test {
                 println!("{}: random (extra threads: {})", i, list.1);
             }
         }
-
-        // for (i, mut it) in worker_iters.into_iter().enumerate() {
-        //     println!("{}: {:?}", i, it.collect::<Vec<&String>>());
-        //     /*
-        //     Thread::spawn(|| {
-        //         let list: Vec<T> = it.collect()
-        //         loop {
-        //             // Won't be performance error, because this
-        //             // function is not async or creating new thread.
-        //             // the threads are the same always WORKERS.
-        //             for i in list {
-        //                 Job(i)
-        //             }
-        //         }
-        //     })
-
-        //     Maybe after starting all the threads, drop the original list.
-        //     */
-        // }
-
-        // if can_use_random {
-        //     for i in 0..extra_workers_count {
-        //         /*
-        //         Thread::spawn(|| {
-        //             /* if endless keep it this way, else do whatever you want */
-        //             loop {
-        //                 // Won't be performance error, because this
-        //                 // function is not async or creating new thread.
-        //                 // the threads are the same always extra_workers_count.
-        //                 Job(random(list));
-        //             }
-        //         })
-        //         */
-        //     }
-        // }
     }
 
     #[ignore]
