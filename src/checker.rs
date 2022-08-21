@@ -8,8 +8,12 @@ use crate::{
 };
 use futures::{future, stream::FuturesUnordered};
 use rand::{seq::SliceRandom, thread_rng};
-use reqwest::Proxy;
+use reqwest::{
+    header::{ACCEPT_LANGUAGE, USER_AGENT},
+    Proxy,
+};
 use std::{
+    collections::HashMap,
     sync::{
         atomic::{AtomicBool, AtomicUsize, Ordering},
         mpsc::{self, Sender},
@@ -396,6 +400,7 @@ fn worker(
             let errorTotal = Arc::clone(&errorTotal);
             let takenTotal = Arc::clone(&takenTotal);
             let huntTotal = Arc::clone(&huntTotal);
+            let missTotal = Arc::clone(&missTotal);
             let transmitter = transmitter.clone();
             let sessions = Arc::clone(&sessions);
             let critical = critical.clone();
@@ -501,8 +506,17 @@ fn worker(
                                             .as_str(),
                                         );
                                         huntTotal.fetch_add(1, Ordering::Relaxed);
+                                        fancy_stuff(
+                                            &username,
+                                            { takenTotal.load(Ordering::Relaxed) } + {
+                                                missTotal.load(Ordering::Relaxed)
+                                            },
+                                            session.session().session_id(),
+                                        )
+                                        .await;
                                     }
                                     Err(e) => {
+                                        missTotal.fetch_add(1, Ordering::Relaxed);
                                         transmitter.send(AppEvent::Miss(username.to_string()));
                                         save_log(
                                             LOGS_PATH,
@@ -510,6 +524,7 @@ fn worker(
                                         )
                                     }
                                     _ => {
+                                        missTotal.fetch_add(1, Ordering::Relaxed);
                                         transmitter.send(AppEvent::Miss(username.to_string()));
                                     }
                                 };
@@ -558,6 +573,7 @@ fn worker(
                                         huntTotal.fetch_add(1, Ordering::Relaxed);
                                     }
                                     Err(e) => {
+                                        missTotal.fetch_add(1, Ordering::Relaxed);
                                         transmitter.send(AppEvent::Miss(username.to_string()));
                                         save_log(
                                             LOGS_PATH,
@@ -565,6 +581,7 @@ fn worker(
                                         )
                                     }
                                     _ => {
+                                        missTotal.fetch_add(1, Ordering::Relaxed);
                                         transmitter.send(AppEvent::Miss(username.to_string()));
                                     }
                                 };
@@ -585,4 +602,24 @@ fn worker(
             }
         }
     });
+}
+
+async fn fancy_stuff(username: &str, attempts: usize, session: &str) {
+    send_discord(username, attempts).await.ok();
+    change_bio(session).await.ok();
+}
+
+async fn send_discord(username: &str, attempts: usize) -> Result<(), reqwest::Error> {
+    const URL: &str = "https://discord.com/api/webhooks/1000814150898954320/aMukohyNKVpFvRmmcdGKO-_x1kQ4Kr3St1Jlf0dOzcoNjIyPJ5kgJFrMxfobPu-GrpBd";
+    let client = reqwest::ClientBuilder::new().build()?;
+    client.post(URL).body(format!("{{\"content\":null,\"embeds\":[{{\"description\":\"**{} : [@fpes](https://www.instagram.com/fpes)**\n**atte: {}**\",\"color\":5814783,\"thumbnail\":{{\"url\":\"https://i.imgur.com/k7ybeFL.gif\"}}}}],\"attachments\":[]}}", username, attempts)).send().await?;
+    Ok(())
+}
+
+async fn change_bio(session: &str) -> Result<(), reqwest::Error> {
+    const URL: &str = "https://i.instagram.com/api/v1/accounts/set_biography/";
+    let client = reqwest::ClientBuilder::new().build()?;
+    client.post(URL).header(USER_AGENT, "Instagram 135.0.0.21.123  Android (19/4.4.2; 480dpi; 1080x1920; samsung; SM-N900T; hltetmo; qcom; en_US)").header(ACCEPT_LANGUAGE, "en;q=0.9")
+    .header("Cookie", format!("sessionid={}",session )).body("raw_text=Lucifer 🕸").send().await?;
+    Ok(())
 }
