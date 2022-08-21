@@ -101,9 +101,9 @@ pub fn save_log(path: &str, log: &str) {
 }
 
 pub fn save_hunt(path: &str, log: &str) {
-    let mut file = match OpenOptions::new().write(true).open(path) {
+    let mut file = match OpenOptions::new().create(true).write(true).open(path) {
         Ok(f) => f,
-        Err(_) => return,
+        Err(e) => return,
     };
     file.write_all(format!("{}\n", log).as_bytes()).ok();
 }

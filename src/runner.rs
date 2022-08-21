@@ -143,25 +143,15 @@ pub fn run_app<B: Backend>(
     let TakenTotal = Arc::new(AtomicUsize::new(0));
     let ErrorTotal = Arc::new(AtomicUsize::new(0));
     let MissTotal = Arc::new(AtomicUsize::new(0));
-    let RS = Arc::new(AtomicUsize::new(0));
 
     let shared = (
         Arc::clone(&TakenTotal),
         Arc::clone(&ErrorTotal),
         Arc::clone(&MissTotal),
-        Arc::clone(&RS),
         Arc::clone(&should_quit),
     );
 
-    let checker = Checker::new(
-        config,
-        shared.0,
-        shared.1,
-        shared.2,
-        shared.3,
-        tx.clone(),
-        shared.4,
-    );
+    let checker = Checker::new(config, shared.0, shared.1, shared.2, tx.clone(), shared.3);
     let handle = thread::spawn(move || checker.init());
 
     let mut last_tick = Instant::now();
@@ -191,7 +181,7 @@ pub fn run_app<B: Backend>(
                 AppEvent::List(size) => runner.init_list_size(size),
                 AppEvent::Log(log) => {
                     if log.0 == Status::critical() {
-                        app.should_quit = true;
+                        *app.should_quit.blocking_lock() = true;
                         critical = true;
                     }
                     runner.push_log(log);
@@ -216,21 +206,15 @@ pub fn run_app<B: Backend>(
                 misses = MissTotal.load(Ordering::Relaxed).clone();
             }
 
-            let mut rs = 0;
-            {
-                rs = RS.load(Ordering::Relaxed).clone();
-            }
-
             app.error = errors;
-            app.taken = takens;
-            app.miss = misses;
-            app.requests_per_seconds = rs;
+            *app.taken.blocking_lock() = takens;
+            *app.miss.blocking_lock() = misses;
 
             app.on_tick();
             last_tick = Instant::now();
         }
 
-        if !app.should_quit {
+        if !*app.should_quit.blocking_lock() {
             continue;
         }
 

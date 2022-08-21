@@ -1,11 +1,7 @@
 use crate::{
-    apis::{
-        APIs, BloksUsernameChange, CheckUsername, Create, CreateBusiness, CreateBusinessValidated,
-        CreateValidated, EarnRequest, EditProfile, Session, UsernameBuilder, UsernameSuggestions,
-        WebCreateAjax, API,
-    },
+    apis::{APIs, EarnRequest, UsernameBuilder, API},
     app::Status,
-    client::{Client, Response},
+    client::Client,
     config::{Config, ProxyType},
     runner::AppEvent,
     utils::{load_proxies, load_sessions, load_usernames, save_hunt, save_log, split_list},
@@ -14,10 +10,6 @@ use futures::{future, stream::FuturesUnordered};
 use rand::{seq::SliceRandom, thread_rng};
 use reqwest::Proxy;
 use std::{
-    any::Any,
-    error::Error,
-    iter::StepBy,
-    slice::Iter,
     sync::{
         atomic::{AtomicBool, AtomicUsize, Ordering},
         mpsc::{self, Sender},
@@ -38,7 +30,6 @@ pub struct Checker {
     ErrorTotal: counter,
     MissTotal: counter,
     HuntTotal: counter,
-    RS: counter,
     Transmitter: Sender<AppEvent>,
     should_quit: Arc<AtomicBool>,
 }
@@ -49,7 +40,6 @@ impl Checker {
         TakenTotal: counter,
         ErrorTotal: counter,
         MissTotal: counter,
-        RS: counter,
         Transmitter: Sender<AppEvent>,
         should_quit: Arc<AtomicBool>,
     ) -> Self {
@@ -58,7 +48,6 @@ impl Checker {
             TakenTotal,
             ErrorTotal,
             MissTotal,
-            RS,
             Transmitter,
             should_quit,
             HuntTotal: Arc::new(AtomicUsize::new(0)),
@@ -193,8 +182,8 @@ impl Checker {
         let sessions = sessions
             .into_iter()
             .filter(|r| r.is_ok())
-            .map(|s| Arc::new(Mutex::new(s.unwrap())))
-            .collect::<Vec<Arc<Mutex<EarnRequest>>>>();
+            .map(|s| s.unwrap())
+            .collect::<Vec<EarnRequest>>();
 
         if sessions.len() != 0 {
             self.Transmitter.send(AppEvent::Log((
@@ -210,6 +199,7 @@ impl Checker {
         }
 
         self.Transmitter.send(AppEvent::List(sessions.len()));
+        let sessions = Arc::new(Mutex::new(sessions));
 
         let mut list_random = None;
         if DONT_WRAP {
@@ -231,32 +221,13 @@ impl Checker {
             list_random = None;
         }
 
-        let calculate_values = (
-            Arc::clone(&self.RS),
-            Arc::clone(&self.HuntTotal),
-            Arc::clone(&self.MissTotal),
-            Arc::clone(&self.TakenTotal),
-            Arc::clone(&self.should_quit),
-        );
-        let mut handles: Vec<JoinHandle<()>> = vec![thread::spawn(move || {
-            // calculate requests per seconds
-            while !calculate_values.4.load(Ordering::Relaxed) {
-                let i = ({ calculate_values.2.load(Ordering::Relaxed).clone() }
-                    + { calculate_values.1.load(Ordering::Relaxed).clone() }
-                    + { calculate_values.3.load(Ordering::Relaxed).clone() });
-                thread::sleep(Duration::from_secs(1));
-                let f = ({ calculate_values.2.load(Ordering::Relaxed).clone() }
-                    + { calculate_values.1.load(Ordering::Relaxed).clone() }
-                    + { calculate_values.3.load(Ordering::Relaxed).clone() });
-                calculate_values.0.store(f - i, Ordering::Release);
-            }
-        })];
+        let mut handles: Vec<JoinHandle<()>> = vec![];
 
         let (tx, rx) = mpsc::channel::<String>();
 
         for list in lists {
             let thread_values = (
-                Arc::clone(&self.RS),
+                0,
                 Arc::clone(&self.HuntTotal),
                 Arc::clone(&self.MissTotal),
                 Arc::clone(&self.TakenTotal),
@@ -265,10 +236,7 @@ impl Checker {
                 self.Transmitter.clone(),
                 Arc::clone(&proxies),
                 tx.clone(),
-                sessions
-                    .iter()
-                    .map(|s| Arc::clone(s))
-                    .collect::<Vec<Arc<Mutex<EarnRequest>>>>(),
+                Arc::clone(&sessions),
             );
             handles.push(thread::spawn(move || {
                 worker(
@@ -305,7 +273,7 @@ impl Checker {
             });
             for _ in 0..extra_threads {
                 let thread_values = (
-                    Arc::clone(&self.RS),
+                    0,
                     Arc::clone(&self.HuntTotal),
                     Arc::clone(&self.MissTotal),
                     Arc::clone(&self.TakenTotal),
@@ -314,10 +282,7 @@ impl Checker {
                     self.Transmitter.clone(),
                     Arc::clone(&proxies),
                     tx.clone(),
-                    sessions
-                        .iter()
-                        .map(|s| Arc::clone(s))
-                        .collect::<Vec<Arc<Mutex<EarnRequest>>>>(),
+                    Arc::clone(&sessions),
                 );
                 let list = Arc::clone(&list);
                 handles.push(thread::spawn(move || {
@@ -394,7 +359,7 @@ fn worker(
     connect_timeout: Duration,
     request_timeout: Duration,
     proxies: Arc<Vec<Proxy>>,
-    sessions: Vec<Arc<Mutex<EarnRequest>>>,
+    sessions: Arc<Mutex<Vec<EarnRequest>>>,
     critical: Sender<String>,
 ) {
     let rt = tokio::runtime::Builder::new_current_thread()
@@ -432,6 +397,8 @@ fn worker(
             let takenTotal = Arc::clone(&takenTotal);
             let huntTotal = Arc::clone(&huntTotal);
             let transmitter = transmitter.clone();
+            let sessions = Arc::clone(&sessions);
+            let critical = critical.clone();
 
             let username = UsernameBuilder::new().single(&get_username()).build();
             let mut attempts = 1;
@@ -458,24 +425,6 @@ fn worker(
                         .build()
                 }
             };
-
-            let mut valid_session: Option<Arc<Mutex<EarnRequest>>> = None;
-            for session in &sessions {
-                let session_lock = session.lock().await;
-                if session_lock.usability() {
-                    valid_session = Some(Arc::clone(session));
-                    break;
-                }
-            }
-
-            if valid_session.is_none() {
-                transmitter.send(AppEvent::Log((
-                    Status::critical(),
-                    "No more sessions".to_string(),
-                )));
-                critical.send(String::from("All sessions have been consumed"));
-                return;
-            }
 
             tokio::spawn(async move {
                 let client = match Client::new(
@@ -512,8 +461,25 @@ fn worker(
                     if resp.status() {
                         if let Some(usernames) = resp.available() {
                             for username in usernames {
-                                let valid_session = valid_session.as_ref().unwrap();
-                                let mut session = valid_session.lock().await;
+                                let mut usable_session = None;
+                                let mut sessions = sessions.lock().await;
+                                for session in &mut *sessions {
+                                    if session.usability() {
+                                        usable_session = Some(session);
+                                        break;
+                                    }
+                                }
+
+                                if usable_session.is_none() {
+                                    transmitter.send(AppEvent::Log((
+                                        Status::critical(),
+                                        "No more sessions".to_string(),
+                                    )));
+                                    critical.send(String::from("All sessions have been consumed"));
+                                    return;
+                                }
+
+                                let mut session = usable_session.unwrap();
                                 let request = session.bloks_username_change();
                                 match client
                                     .execute(
@@ -523,8 +489,8 @@ fn worker(
                                     .await
                                 {
                                     Ok(resp) if resp.status() => {
-                                        transmitter.send(AppEvent::Hunt(username.to_string()));
                                         session.disable(Some(username));
+                                        transmitter.send(AppEvent::Hunt(username.to_string()));
                                         save_hunt(
                                             HUNTS_PATH,
                                             format!(
@@ -550,8 +516,25 @@ fn worker(
                             }
                         } else {
                             for username in username.all() {
-                                let valid_session = valid_session.as_ref().unwrap();
-                                let mut session = valid_session.lock().await;
+                                let mut usable_session = None;
+                                let mut sessions = sessions.lock().await;
+                                for session in &mut *sessions {
+                                    if session.usability() {
+                                        usable_session = Some(session);
+                                        break;
+                                    }
+                                }
+
+                                if usable_session.is_none() {
+                                    transmitter.send(AppEvent::Log((
+                                        Status::critical(),
+                                        "No more sessions".to_string(),
+                                    )));
+                                    critical.send(String::from("All sessions have been consumed"));
+                                    return;
+                                }
+
+                                let mut session = usable_session.unwrap();
                                 let request = session.bloks_username_change();
                                 match client
                                     .execute(
@@ -561,8 +544,8 @@ fn worker(
                                     .await
                                 {
                                     Ok(resp) if resp.status() => {
-                                        transmitter.send(AppEvent::Hunt(username.to_string()));
                                         session.disable(Some(&username));
+                                        transmitter.send(AppEvent::Hunt(username.to_string()));
                                         save_hunt(
                                             HUNTS_PATH,
                                             format!(

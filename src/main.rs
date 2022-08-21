@@ -1,13 +1,4 @@
 //FIXME: fix all warnings and not ignoring them
-#![allow(
-    dead_code,
-    non_snake_case,
-    unused_must_use,
-    unused_imports,
-    unused_variables,
-    non_camel_case_types,
-    unused_assignments
-)]
 mod apis;
 mod app;
 mod checker;
@@ -46,9 +37,8 @@ use std::thread;
 use std::{error::Error, time::Duration};
 use style::{
     clear, PrintColorful, PrintlnColorful, PrintlnColorfulPlus, PrintlnError, PrintlnErrorQuit,
-    PrintlnSuccess,
 };
-use utils::handle;
+use utils::{handle, save_hunt};
 
 /*
 TODO:

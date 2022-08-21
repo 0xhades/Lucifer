@@ -62,7 +62,7 @@ where
         )
         .split(area);
 
-    draw_gauges(f, app, chunks[0]);
+    draw_status(f, app, chunks[0]);
     draw_lists(f, app, chunks[1]);
     draw_text(f, chunks[2]);
 }
@@ -206,29 +206,19 @@ where
     f.render_stateful_widget(error, chunks[3], &mut app.errors.state);
 }
 
-fn draw_gauges<B>(f: &mut Frame<B>, app: &mut App, area: Rect)
+fn draw_status<B>(f: &mut Frame<B>, app: &mut App, area: Rect)
 where
     B: Backend,
 {
     let chunks = Layout::default()
-        .constraints([Constraint::Length(2), Constraint::Length(3)].as_ref())
+        .constraints([Constraint::Length(3)].as_ref())
         .margin(1)
         .split(area);
     let block = Block::default().borders(Borders::ALL).title("Status");
     f.render_widget(block, area);
 
-    let label = format!("{:.2}%", app.progress * 100.0);
-    let gauge = Gauge::default()
-        .block(Block::default().title("Used Sessions:"))
-        .gauge_style(
-            Style::default()
-                .fg(Color::Magenta)
-                .bg(Color::Black)
-                .add_modifier(Modifier::ITALIC | Modifier::BOLD),
-        )
-        .label(label)
-        .ratio(app.progress);
-    f.render_widget(gauge, chunks[0]);
+    let taken = { (*app.taken.blocking_lock()).clone() };
+    let miss = { (*app.miss.blocking_lock()).clone() };
 
     let text = vec![
         Spans::from(vec![
@@ -237,7 +227,7 @@ where
         ]),
         Spans::from(vec![
             Span::styled("Taken: ", Style::default().fg(Color::LightMagenta)),
-            Span::raw(app.taken.to_string()),
+            Span::raw({ (*app.taken.blocking_lock()).clone() }.to_string()),
         ]),
         Spans::from(vec![
             Span::styled("Errors: ", Style::default().fg(Color::LightRed)),
@@ -245,19 +235,19 @@ where
         ]),
         Spans::from(vec![
             Span::styled("Total Attempts: ", Style::default().fg(Color::Yellow)),
-            Span::raw((app.taken + app.hunt.items.len() + app.miss).to_string()),
+            Span::raw((miss + app.hunt.items.len() + taken).to_string()),
         ]),
         Spans::from(vec![
             Span::styled(
                 "Requests Per Seconds: ",
                 Style::default().fg(Color::LightBlue),
             ),
-            Span::raw(app.requests_per_seconds.to_string()),
+            Span::raw({ (*app.requests_per_seconds.blocking_lock()).clone() }.to_string()),
         ]),
     ];
 
     let paragraph = Paragraph::new(text).wrap(Wrap { trim: true });
-    f.render_widget(paragraph, chunks[1]);
+    f.render_widget(paragraph, chunks[0]);
 }
 
 fn draw_text<B>(f: &mut Frame<B>, area: Rect)

@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc, sync::Arc};
+use std::{cell::RefCell, rc::Rc, sync::Arc, thread, time::Duration};
 
 use super::runner::Runner;
 use tokio::sync::Mutex;
@@ -22,12 +22,12 @@ impl Status {
 
 pub struct App {
     pub title: String,
-    pub should_quit: bool,
+    pub should_quit: Arc<Mutex<bool>>,
     pub progress: f64,
-    pub taken: usize,
-    pub miss: usize,
+    pub taken: Arc<Mutex<usize>>,
+    pub miss: Arc<Mutex<usize>>,
     pub error: usize,
-    pub requests_per_seconds: usize,
+    pub requests_per_seconds: Arc<Mutex<usize>>,
     pub hunt: StatefulList<String>,
     pub takens: StatefulList<String>,
     pub errors: StatefulList<String>,
@@ -110,11 +110,36 @@ impl TabsState {
 
 impl App {
     pub fn new(title: String, runner: Rc<RefCell<Runner>>, enhanced_graphics: bool) -> App {
+        let requests_per_seconds = Arc::new(Mutex::new(0));
+        let taken = Arc::new(Mutex::new(0));
+        let miss = Arc::new(Mutex::new(0));
+        let should_quit = Arc::new(Mutex::new(false));
+
+        let shared_rs = Arc::clone(&requests_per_seconds);
+        let shared_taken = Arc::clone(&taken);
+        let shared_miss = Arc::clone(&miss);
+        let shared_quit = Arc::clone(&should_quit);
+        thread::spawn(move || {
+            while !*shared_quit.blocking_lock() {
+                let miss = { (*shared_miss.blocking_lock()).clone() };
+                let taken = { (*shared_taken.blocking_lock()).clone() };
+
+                let i = miss + taken;
+                thread::sleep(Duration::from_secs(1));
+
+                let miss = { (*shared_miss.blocking_lock()).clone() };
+                let taken = { (*shared_taken.blocking_lock()).clone() };
+                let f = miss + taken;
+
+                *shared_rs.blocking_lock() = f - i;
+            }
+        });
+
         App {
             title,
-            should_quit: false,
+            should_quit,
             progress: 0.0,
-            taken: 0,
+            taken,
             error: 0,
             hunt: StatefulList::new(),
             takens: StatefulList::new(),
@@ -123,8 +148,8 @@ impl App {
             tabs: TabsState::new(vec!["Main".to_string(), "About".to_string()]),
             enhanced_graphics,
             runner,
-            requests_per_seconds: 0,
-            miss: 0,
+            requests_per_seconds,
+            miss,
         }
     }
 
@@ -139,7 +164,7 @@ impl App {
     pub fn on_key(&mut self, c: char) {
         match c {
             'q' => {
-                self.should_quit = true;
+                *self.should_quit.blocking_lock() = true;
             }
 
             _ => {}
@@ -148,17 +173,6 @@ impl App {
 
     pub fn on_tick(&mut self) {
         let mut runner = self.runner.borrow_mut();
-
-        let total = (self.hunt.items.len()) as f64;
-
-        let size = runner.list_size() as f64;
-        if size != 0.0 {
-            self.progress += total / size;
-        }
-
-        if self.progress > 1.0 {
-            self.progress = 0.0;
-        }
 
         if let Some(taken) = runner.pop_taken() {
             if self.takens.items.len() > 5 {
