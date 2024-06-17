@@ -610,9 +610,9 @@ async fn fancy_stuff(username: &str, attempts: usize, session: &str) {
 }
 
 async fn send_discord(username: &str, attempts: usize) -> Result<(), reqwest::Error> {
-    const URL: &str = "https://discord.com/api/webhooks/1000814150898954320/aMukohyNKVpFvRmmcdGKO-_x1kQ4Kr3St1Jlf0dOzcoNjIyPJ5kgJFrMxfobPu-GrpBd";
+    const URL: &str = "https://discord.com/api/webhooks/x";
     let client = reqwest::ClientBuilder::new().build()?;
-    client.post(URL).body(format!("{{\"content\":null,\"embeds\":[{{\"description\":\"**{} : [@fpes](https://www.instagram.com/fpes)**\n**atte: {}**\",\"color\":5814783,\"thumbnail\":{{\"url\":\"https://i.imgur.com/k7ybeFL.gif\"}}}}],\"attachments\":[]}}", username, attempts)).send().await?;
+    client.post(URL).body(format!("{{\"content\":null,\"embeds\":[{{\"description\":\"**{} : [@fpes](https://www.instagram.com/x)**\n**atte: {}**\",\"color\":5814783,\"thumbnail\":{{\"url\":\"https://i.imgur.com/xxx\"}}}}],\"attachments\":[]}}", username, attempts)).send().await?;
     Ok(())
 }
 
